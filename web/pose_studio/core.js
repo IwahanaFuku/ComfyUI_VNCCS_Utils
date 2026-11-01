@@ -5,6 +5,8 @@
  */
 
 
+import { cloneFittingState, normalizeFittingState } from "./pose_fitting2d.mjs";
+
 // Determine the extension's base URL dynamically to support varied directory names
 const EXTENSION_URL = new URL(".", import.meta.url).toString();
 export const POSE_STUDIO_CAPTURE_FOV = 30;
@@ -1117,6 +1119,8 @@ export class PoseViewerCore {
 
         // Pose state
         this.modelRotation = { x: 0, y: 0, z: 0 };
+        // 2D Pose Fitting constraints of the active character's current pose.
+        this.fitting2d = null;
         this.importedFigureVisible = true;
         this.samMeshOverlayVisible = false;
         this._samMeshOverlayGroup = null;
@@ -3795,7 +3799,9 @@ export class PoseViewerCore {
             // Pole target positions
             poleTargetPositions,
             // Hip bone positions (for undo)
-            hipBonePosition
+            hipBonePosition,
+            // 2D Pose Fitting markers travel with the pose (undo, tabs, library).
+            ...(this.fitting2d ? { fitting2d: cloneFittingState(this.fitting2d) } : {}),
         };
     }
 
@@ -3852,6 +3858,7 @@ export class PoseViewerCore {
         const bonePositions = pose.bonePositions || {};
         const modelRot = pose.modelRotation || [0, 0, 0];
         const ikPositions = pose.ikEffectorPositions || {};
+        this.fitting2d = normalizeFittingState(pose.fitting2d);
 
         // Reset all bones
         for (const b of this.boneList) {
