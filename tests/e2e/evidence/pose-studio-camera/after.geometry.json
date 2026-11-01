@@ -1,0 +1,22 @@
+{
+  "lens": {
+    "fov_deg": 50,
+    "distance": 45.00000000000003,
+    "yaw_deg": -56.37362637362638,
+    "pitch_deg": 16.442307692307715,
+    "aligned": true
+  },
+  "capture_fov": 50,
+  "editor_fov": 71.57183532243427,
+  "frame_height_fraction": 0.6468865743941348,
+  "capture_vs_view_world_max_diff": 0,
+  "yaw_enabled": true,
+  "widget_rect": {
+    "x": 110,
+    "y": 156,
+    "width": 1380,
+    "height": 814
+  },
+  "run_output": "ComfyUI_00004_.png",
+  "page_errors": []
+}
