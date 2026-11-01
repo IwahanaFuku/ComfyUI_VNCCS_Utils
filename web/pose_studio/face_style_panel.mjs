@@ -16,7 +16,7 @@ import {
     faceStyleValues,
     isDefaultFaceStyle,
     resolveFaceStylePreset,
-} from "./face_style.mjs";
+} from "./face_style.mjs?v=20261102.1";
 
 // The widget imports Face Style only through this module.
 export { DEFAULT_FACE_STYLE_PARAMS, FACE_STYLE_KEYS };

@@ -22,7 +22,7 @@ import {
     endFaceStyleCompare,
     syncFaceStyleControls,
     withFaceStyleDefaults,
-} from "./pose_studio/face_style_panel.mjs";
+} from "./pose_studio/face_style_panel.mjs?v=20261102.1";
 import { importMixamoFBXAnimation } from "./pose_studio/imports/mixamo.js?v=1791754604000";
 import { detectAndParseJSON, convertOpenPoseToPose, roundTripTest } from "./pose_studio/imports/openpose.js?v=1791754604000";
 import { installCustomSelects } from "./shared/custom_select.mjs";

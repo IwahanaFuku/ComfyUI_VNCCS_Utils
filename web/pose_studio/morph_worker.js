@@ -3,8 +3,8 @@ import {
     buildStaticModelData,
     loadMorphPack,
     solveBodyMorph,
-} from "./morph_runtime.mjs";
-import { applyFaceStyleToMorph, bodyMorphSignature } from "./face_style.mjs";
+} from "./morph_runtime.mjs?v=20261102.1";
+import { applyFaceStyleToMorph, bodyMorphSignature } from "./face_style.mjs?v=20261102.1";
 
 let morphDataPromise = null;
 let morphData = null;

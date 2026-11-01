@@ -1,4 +1,4 @@
-import { applyFaceStyleToMorph } from "./face_style.mjs";
+import { applyFaceStyleToMorph } from "./face_style.mjs?v=20261102.1";
 
 export const POSE_STUDIO_MAKEHUMAN_ASSET_URL = new URL(
     "./assets/pose_studio_makehuman.v2.bin.gz",
