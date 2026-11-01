@@ -6702,7 +6702,7 @@ class PoseStudioWidget {
     }
 
     async awaitReadyForCompositeCapture(timeoutMs = 120000) {
-        endFaceStyleCompare(this);
+        if (this._faceStyleCompare) endFaceStyleCompare(this);
         const deadline = Date.now() + timeoutMs;
         while (Date.now() < deadline) {
             if (this._disposed) throw new Error("Pose Studio was disposed");
