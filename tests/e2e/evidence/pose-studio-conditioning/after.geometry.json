@@ -1,0 +1,261 @@
+{
+ "default": [
+  {
+   "size": [
+    1024,
+    1024
+   ],
+   "all_outputs_same_size": true,
+   "rgb_vs_silhouette_mismatch_px": 981,
+   "mismatch_outside_1px_antialias_band": 0,
+   "unknown_character_id_px": 0,
+   "mask_vs_id_mismatch_px": 0,
+   "depth_normal_outline_outside_silhouette": {
+    "depth": 0,
+    "normal": 0,
+    "outline": 0
+   },
+   "characters": {
+    "1": {
+     "centroid": [
+      511.5,
+      486.2
+     ],
+     "meanDepth": 104.5,
+     "pixels": 58276
+    }
+   }
+  }
+ ],
+ "twoCharacters": [
+  {
+   "size": [
+    1024,
+    1024
+   ],
+   "all_outputs_same_size": true,
+   "rgb_vs_silhouette_mismatch_px": 1780,
+   "mismatch_outside_1px_antialias_band": 0,
+   "unknown_character_id_px": 0,
+   "mask_vs_id_mismatch_px": 0,
+   "depth_normal_outline_outside_silhouette": {
+    "depth": 0,
+    "normal": 0,
+    "outline": 0
+   },
+   "characters": {
+    "1": {
+     "centroid": [
+      500,
+      489.3
+     ],
+     "meanDepth": 50.8,
+     "pixels": 48721
+    },
+    "2": {
+     "centroid": [
+      664.4,
+      481.4
+     ],
+     "meanDepth": 215.3,
+     "pixels": 86155
+    }
+   }
+  }
+ ],
+ "lens": [
+  {
+   "size": [
+    1024,
+    1024
+   ],
+   "all_outputs_same_size": true,
+   "rgb_vs_silhouette_mismatch_px": 563,
+   "mismatch_outside_1px_antialias_band": 0,
+   "unknown_character_id_px": 0,
+   "mask_vs_id_mismatch_px": 0,
+   "depth_normal_outline_outside_silhouette": {
+    "depth": 0,
+    "normal": 0,
+    "outline": 0
+   },
+   "characters": {
+    "1": {
+     "centroid": [
+      507.1,
+      502.6
+     ],
+     "meanDepth": 49.9,
+     "pixels": 5255
+    },
+    "2": {
+     "centroid": [
+      558.7,
+      501.9
+     ],
+     "meanDepth": 215.1,
+     "pixels": 8193
+    }
+   }
+  }
+ ],
+ "aligned": [
+  {
+   "size": [
+    1024,
+    1024
+   ],
+   "all_outputs_same_size": true,
+   "rgb_vs_silhouette_mismatch_px": 758,
+   "mismatch_outside_1px_antialias_band": 0,
+   "unknown_character_id_px": 0,
+   "mask_vs_id_mismatch_px": 0,
+   "depth_normal_outline_outside_silhouette": {
+    "depth": 0,
+    "normal": 0,
+    "outline": 0
+   },
+   "characters": {
+    "1": {
+     "centroid": [
+      515.2,
+      684.5
+     ],
+     "meanDepth": 82.8,
+     "pixels": 9957
+    },
+    "2": {
+     "centroid": [
+      464.9,
+      787.1
+     ],
+     "meanDepth": 201.5,
+     "pixels": 17661
+    }
+   }
+  }
+ ],
+ "grid": [
+  {
+   "size": [
+    2048,
+    1024
+   ],
+   "all_outputs_same_size": true,
+   "rgb_vs_silhouette_mismatch_px": 2183,
+   "mismatch_outside_1px_antialias_band": 0,
+   "unknown_character_id_px": 0,
+   "mask_vs_id_mismatch_px": 0,
+   "depth_normal_outline_outside_silhouette": {
+    "depth": 0,
+    "normal": 0,
+    "outline": 0
+   },
+   "characters": {
+    "1": {
+     "centroid": [
+      1014.5,
+      565.4
+     ],
+     "meanDepth": 67.2,
+     "pixels": 19502
+    },
+    "2": {
+     "centroid": [
+      1352.8,
+      533.5
+     ],
+     "meanDepth": 212.8,
+     "pixels": 103494
+    }
+   }
+  }
+ ],
+ "manager": [
+  {
+   "size": [
+    1024,
+    1024
+   ],
+   "all_outputs_same_size": true,
+   "rgb_vs_silhouette_mismatch_px": 1978,
+   "mismatch_outside_1px_antialias_band": 0,
+   "unknown_character_id_px": 0,
+   "mask_vs_id_mismatch_px": 0,
+   "depth_normal_outline_outside_silhouette": {
+    "depth": 0,
+    "normal": 0,
+    "outline": 0
+   },
+   "characters": {
+    "1": {
+     "centroid": [
+      767.1,
+      315.1
+     ],
+     "meanDepth": 86.7,
+     "pixels": 55252
+    },
+    "2": {
+     "centroid": [
+      617.9,
+      348.6
+     ],
+     "meanDepth": 201.3,
+     "pixels": 177754
+    }
+   }
+  },
+  {
+   "size": [
+    1024,
+    1024
+   ],
+   "all_outputs_same_size": true,
+   "rgb_vs_silhouette_mismatch_px": 1761,
+   "mismatch_outside_1px_antialias_band": 0,
+   "unknown_character_id_px": 0,
+   "mask_vs_id_mismatch_px": 0,
+   "depth_normal_outline_outside_silhouette": {
+    "depth": 0,
+    "normal": 0,
+    "outline": 0
+   },
+   "characters": {
+    "1": {
+     "centroid": [
+      511.7,
+      420.5
+     ],
+     "meanDepth": 50.8,
+     "pixels": 14437
+    },
+    "2": {
+     "centroid": [
+      511.7,
+      467.6
+     ],
+     "meanDepth": 215.1,
+     "pixels": 128477
+    }
+   }
+  }
+ ],
+ "legacy_workflow_load": {
+  "outputs": [
+   "images:IMAGE:1",
+   "lighting_prompt:STRING:0",
+   "depth:IMAGE:0",
+   "normal:IMAGE:0",
+   "outline:IMAGE:0",
+   "silhouette:IMAGE:0",
+   "mask:MASK:0",
+   "character_id:IMAGE:0"
+  ],
+  "imagesTarget": [
+   "2"
+  ]
+ },
+ "page_errors": [],
+ "platform": "tests/e2e/platform CPU lane (SwiftShader WebGL), commit a2ed6c3"
+}
