@@ -2,12 +2,32 @@ import {
     buildModelIndices,
     buildStaticModelData,
     loadMorphPack,
-    solveMorph,
+    solveBodyMorph,
 } from "./morph_runtime.mjs";
+import { applyFaceStyleToMorph, bodyMorphSignature } from "./face_style.mjs";
 
 let morphDataPromise = null;
 let morphData = null;
 const clientGenitalState = new Map();
+// Recent unstyled body solves (one per character in a typical scene). A Face
+// Style slider drag reuses the body morph and only re-applies the face stage.
+const BODY_MORPH_CACHE_LIMIT = 4;
+const bodyMorphCache = new Map();
+
+function solveMorphCached(data, params) {
+    const key = bodyMorphSignature(params);
+    let entry = bodyMorphCache.get(key);
+    if (entry) {
+        bodyMorphCache.delete(key);
+    } else {
+        entry = { body: solveBodyMorph(data, params) };
+        while (bodyMorphCache.size >= BODY_MORPH_CACHE_LIMIT) {
+            bodyMorphCache.delete(bodyMorphCache.keys().next().value);
+        }
+    }
+    bodyMorphCache.set(key, entry);
+    return applyFaceStyleToMorph(data, entry.body, params, entry);
+}
 
 async function ensureMorphData() {
     if (morphData) return morphData;
@@ -31,7 +51,7 @@ self.onmessage = async (event) => {
         if (type !== "solve") return;
 
         const data = await ensureMorphData();
-        const result = solveMorph(data, params || {});
+        const result = solveMorphCached(data, params || {});
         const previousGenitalState = clientGenitalState.get(clientId);
         const topologyChanged = previousGenitalState !== undefined
             && previousGenitalState !== result.includeGenitals;

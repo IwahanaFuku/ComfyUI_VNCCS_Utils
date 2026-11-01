@@ -122,6 +122,7 @@ The left side contains precision controls:
 - Age, gender blend, weight, muscle, height.
 - Female and male-specific body sliders.
 - Head, limb, torso, hand/foot proportion controls.
+- Face Style: anime-style face shaping presets and sliders (see below).
 - Model rotation controls.
 - Shared camera dimensions and angle controls, plus the existing Zoom/radar
   positioning widget for the selected character.
@@ -154,6 +155,32 @@ The right side focuses on prompt, pose library, and lighting:
 - Ambient, directional, and point light controls.
 - Light position/radar controls.
 - Lighting prompt generation state.
+
+## Face Style
+
+The **Face Style** section reshapes the face of the selected character's
+MakeHuman mesh toward a stylized, anime-like look. Only vertex positions of the
+head surface, eyelids and eyeballs change; the skeleton, bone lengths, IK
+targets and every pose stay exactly the same.
+
+- **Preset**: Default (the unchanged MakeHuman face), Soft, Anime Light,
+  Anime Strong, or Custom. Moving any slider switches the preset to Custom.
+- **Face Softness**: smooths and rounds the facial surface (cheeks, brow,
+  chin) without touching the eyes, nostrils or lips.
+- **Jaw Narrowness**: tapers the lower jaw and chin into a V shape while the
+  cheekbones, cranium and neck keep their width.
+- **Nose Reduction**: shortens and narrows the nose and lowers its projection.
+- **Eye Scale**: enlarges the eye openings and eyeballs together; the
+  surrounding skin slides along the face.
+- **Reset Face** returns the selected character to Default. Holding
+  **Compare Default** previews the unchanged face until the button is
+  released; it never changes the saved values or the rendered output.
+
+Sliders update the viewport continuously while dragging, and one drag is one
+undo step. Face Style is stored per character in `pose_data`, in Pose Library
+character scenes and animations, and in workflows. Data saved before this
+feature loads as Default. The shaping follows each body's own proportions,
+so it works for any age, gender and weight setting.
 
 ## Characters
 

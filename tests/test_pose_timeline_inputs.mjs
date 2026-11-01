@@ -3,6 +3,7 @@ import fs from "node:fs/promises";
 import test from "node:test";
 import vm from "node:vm";
 import * as animation from "../web/pose_studio/animation.mjs";
+import * as faceStyle from "../web/pose_studio/face_style_panel.mjs";
 import { createScene } from "./helpers/pose_studio_scene.mjs";
 
 const source = await fs.readFile(new URL("../web/vnccs_pose_studio.js", import.meta.url), "utf8");
@@ -50,7 +51,7 @@ function editor(t) {
     }
     const Widget = vm.runInNewContext(source.slice(source.indexOf("class PoseStudioWidget {"),
         source.indexOf("// === ComfyUI Extension Registration ===")) + "\nPoseStudioWidget", {
-        ...animation, PoseAnimationTimeline: Timeline, document, console,
+        ...animation, ...faceStyle, PoseAnimationTimeline: Timeline, document, console,
     });
     const state = animation.createDefaultAnimationState({ bones: { head: [0, 0, 0] } });
     animation.setTrackKeyframeFromEuler(state, "head", 2, [10, 0, 0]);

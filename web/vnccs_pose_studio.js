@@ -15,6 +15,14 @@ import {
     cameraPromptToSkydomeRotation,
 } from "./camera_control/utils.mjs";
 import { HAND_PRESETS } from "./pose_studio/hand_presets.js";
+import {
+    DEFAULT_FACE_STYLE_PARAMS,
+    FACE_STYLE_KEYS,
+    createFaceStyleSection,
+    endFaceStyleCompare,
+    syncFaceStyleControls,
+    withFaceStyleDefaults,
+} from "./pose_studio/face_style_panel.mjs";
 import { importMixamoFBXAnimation } from "./pose_studio/imports/mixamo.js?v=1791754604000";
 import { detectAndParseJSON, convertOpenPoseToPose, roundTripTest } from "./pose_studio/imports/openpose.js?v=1791754604000";
 import { installCustomSelects } from "./shared/custom_select.mjs";
@@ -4247,6 +4255,8 @@ class PoseStudioWidget {
             penis_len: 0.5, penis_circ: 0.5, penis_test: 0.5,
             // Visual modifiers (client-side bone scaling)
             ...DEFAULT_POSE_STUDIO_MESH_PROPORTIONS,
+            // Face Style (render-mesh-only face shaping)
+            ...DEFAULT_FACE_STYLE_PARAMS,
         };
 
         // Export settings
@@ -5009,6 +5019,7 @@ class PoseStudioWidget {
         }
 
         leftPanel.appendChild(proportionsSection.el);
+        leftPanel.appendChild(createFaceStyleSection(this).el);
 
         // --- GENDER SETTINGS SECTION ---
         const genderSection = this.createSection("Gender Settings", false);
@@ -6589,6 +6600,7 @@ class PoseStudioWidget {
         }
         this.updateGenderUI();
         this.updateGenderVisibility();
+        syncFaceStyleControls(this);
         this.refreshPoseManagerControls();
         this.syncCameraWidgets();
         this.updateRotationSliders();
@@ -6690,6 +6702,7 @@ class PoseStudioWidget {
     }
 
     async awaitReadyForCompositeCapture(timeoutMs = 120000) {
+        endFaceStyleCompare(this);
         const deadline = Date.now() + timeoutMs;
         while (Date.now() < deadline) {
             if (this._disposed) throw new Error("Pose Studio was disposed");
@@ -9369,6 +9382,7 @@ class PoseStudioWidget {
     }
 
     restoreMeshHistory(mesh) {
+        mesh = withFaceStyleDefaults(mesh);
         const shapeChanged = Object.keys(mesh).some(key => this.isLiveMorphKey(key)
             && mesh[key] !== this.meshParams[key]);
         Object.assign(this.meshParams, mesh);
@@ -14393,6 +14407,7 @@ class PoseStudioWidget {
             "age", "gender", "weight", "muscle", "height",
             "breast_size", "firmness",
             "show_genitals", "penis_len", "penis_circ", "penis_test",
+            ...FACE_STYLE_KEYS,
         ].includes(key);
     }
 
@@ -16014,7 +16029,7 @@ class PoseStudioWidget {
             this.characters = normalizedScene.characters;
             this.activeCharacterId = normalizedScene.activeCharacterId;
             if (restoredActiveCharacter) {
-                this.meshParams = { ...this.meshParams, ...restoredActiveCharacter.mesh };
+                this.meshParams = { ...this.meshParams, ...withFaceStyleDefaults(restoredActiveCharacter.mesh) };
                 restoredActiveCharacter.mesh = this.meshParams;
                 this.poses = restoredActiveCharacter.poses;
                 restoredActiveCharacter.transform = normalizeCharacterTransform(restoredActiveCharacter.transform);

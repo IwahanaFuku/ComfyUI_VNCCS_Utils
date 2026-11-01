@@ -1,3 +1,5 @@
+import { applyFaceStyleToMorph } from "./face_style.mjs";
+
 export const POSE_STUDIO_MAKEHUMAN_ASSET_URL = new URL(
     "./assets/pose_studio_makehuman.v2.bin.gz",
     import.meta.url,
@@ -280,7 +282,11 @@ export function buildStaticModelData(data, includeGenitals) {
     };
 }
 
-export function solveMorph(data, params = {}) {
+/**
+ * Body/gender/age morph without Face Style. Bones and landmarks always come
+ * from this unstyled shape, so face edits never move the skeleton.
+ */
+export function solveBodyMorph(data, params = {}) {
     const factors = calculateMorphFactors(params);
     const vertices = new Float32Array(data.baseVertices);
     for (const target of data.targets) {
@@ -302,4 +308,8 @@ export function solveMorph(data, params = {}) {
         landmarkIndices,
         includeGenitals: modelUsesGenitals(params),
     };
+}
+
+export function solveMorph(data, params = {}) {
+    return applyFaceStyleToMorph(data, solveBodyMorph(data, params), params);
 }

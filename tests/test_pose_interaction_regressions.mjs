@@ -4,6 +4,7 @@ import test from "node:test";
 import vm from "node:vm";
 import * as animation from "../web/pose_studio/animation.mjs";
 import * as characters from "../web/pose_studio/characters.mjs";
+import * as faceStyle from "../web/pose_studio/face_style_panel.mjs";
 import * as THREE from "../web/vendor/three/three.module.js";
 import { PoseViewerCore as Core } from "../web/pose_studio/core.js";
 
@@ -20,7 +21,7 @@ function harness() {
     const frames = new Map();
     let nextFrame = 0;
     const document = { createElement: () => new Element(), activeElement: null };
-    const context = { ...animation, ...characters, document, console, setTimeout, clearTimeout,
+    const context = { ...animation, ...characters, ...faceStyle, document, console, setTimeout, clearTimeout,
         requestAnimationFrame: fn => { frames.set(++nextFrame, fn); return nextFrame; },
         cancelAnimationFrame: id => frames.delete(id), app: { graph: {} }, Blob, URL,
     };
