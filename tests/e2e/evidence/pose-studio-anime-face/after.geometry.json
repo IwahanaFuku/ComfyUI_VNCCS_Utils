@@ -1,0 +1,75 @@
+{
+ "bonesUnchangedStrong": true,
+ "geometryChangedStrong": true,
+ "ikRest": true,
+ "realtime": {
+  "latenciesMs": [
+   23.6,
+   49.5,
+   55.1,
+   48.7,
+   47.7,
+   49,
+   46.7,
+   49.1,
+   47.5,
+   50.1
+  ],
+  "faceStyle": "custom",
+  "select": "custom",
+  "value": 1
+ },
+ "undoEntriesForDrag": 1,
+ "afterUndo": {
+  "eye": 0,
+  "select": "default",
+  "slider": "0"
+ },
+ "undoGeometryRestored": true,
+ "compare": {
+  "changedWhileHeld": true,
+  "during": "0.17536,4.87015,1.17224",
+  "paramsUnchanged": true,
+  "restored": true
+ },
+ "compareShowsDefault": true,
+ "chars": {
+  "newCharPreset": "anime_strong",
+  "firstPreset": "anime_strong",
+  "firstSoft": 1,
+  "secondPreset": "soft",
+  "secondSoft": 0.6,
+  "ids": [
+   "character-1",
+   "character-2"
+  ],
+  "meshes": [
+   "anime_strong",
+   "soft"
+  ]
+ },
+ "workflow": {
+  "roundTrip": {
+   "meshes": [
+    "anime_strong",
+    "soft"
+   ],
+   "activePreset": "soft",
+   "soft": 0.6
+  },
+  "legacy": {
+   "meshes": [
+    "(missing)",
+    "default"
+   ],
+   "activePreset": "default",
+   "values": [
+    0,
+    0
+   ]
+  },
+  "strippedHasFace": false
+ },
+ "pageErrors": null,
+ "note": "Measured on the real ComfyUI test platform (CPU, headless Chromium). latenciesMs = time from slider input event to the first changed vertex in the rendered geometry."
+}
