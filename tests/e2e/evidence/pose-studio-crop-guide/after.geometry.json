@@ -1,0 +1,270 @@
+{
+  "captured_at_commit": "2e6f679",
+  "platform": "tests/e2e/platform (CPU), port 8193",
+  "scene": "2 characters, 1280x720, FOV 50, aligned to an orbited view, then FOV 35 / Distance 120",
+  "evidence_guide": {
+    "bbox": {
+      "x0": 559,
+      "y0": 387,
+      "x1": 668,
+      "y1": 520
+    },
+    "pixel": {
+      "x": 546,
+      "y": 364,
+      "width": 135,
+      "height": 180
+    },
+    "readout": "135 × 180 PX AT 546, 364 OF 1280 × 720 · RATIO 0.750"
+  },
+  "checks_passed": 39,
+  "checks_total": 39,
+  "drag": {
+    "fps": 60.22326674395135,
+    "avgDrawMs": 0.5074999988079071,
+    "maxDrawMs": 0.8999999761581421,
+    "avgMoveMs": 0.6325000047683715,
+    "maxMoveMs": 1.0999999642372131,
+    "draws": 40,
+    "moves": 40
+  },
+  "crop_json_example": {
+    "schema_version": 1,
+    "type": "vnccs_crop_guide",
+    "enabled": true,
+    "coordinate_system": "top_left_normalized",
+    "source": {
+      "width": 1280,
+      "height": 720
+    },
+    "rect": {
+      "x": 0.078125,
+      "y": 0.05555555555555555,
+      "width": 0.39140625,
+      "height": 0.6958333333333333
+    },
+    "pixel_rect": {
+      "x": 100,
+      "y": 40,
+      "width": 501,
+      "height": 501
+    },
+    "aspect_ratio": "1:1",
+    "aspect_ratio_value": 1,
+    "aspect_ratio_locked": true,
+    "pose_index": 0
+  },
+  "resize_1920x1080": {
+    "rect": {
+      "x": 150,
+      "y": 60,
+      "width": 752,
+      "height": 752
+    },
+    "meanAbsDiff": 0.11866478309868098
+  },
+  "letterbox_stretch": {
+    "size": [
+      501,
+      891
+    ],
+    "meanAbsDiff": 30.85683296032338
+  },
+  "results": [
+    {
+      "name": "Pose Studio exposes 11 outputs with crop outputs at 8-10",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "scene: 2 characters, FOV 50, aligned to a moved view, 1280x720",
+      "ok": true,
+      "detail": "{\"chars\":2,\"fov\":50,\"distance\":75.21303078589507,\"aligned\":true,\"size\":[1280,720]}"
+    },
+    {
+      "name": "run A (guide disabled) succeeds",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "disabled guide: crop_image is the full image",
+      "ok": true,
+      "detail": "1280x720"
+    },
+    {
+      "name": "disabled guide: crop_json enabled=false with the stored default rect",
+      "ok": true,
+      "detail": "{\"x\":128,\"y\":72,\"width\":1024,\"height\":576}"
+    },
+    {
+      "name": "Enabled + 1:1 from the panel: square pixel rect, two undo steps",
+      "ok": true,
+      "detail": "{\"x\":280,\"y\":0,\"width\":720,\"height\":720}"
+    },
+    {
+      "name": "Edit Crop turns editing on",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "overlay frame corners sit on the orange capture frame (aligned, FOV 50)",
+      "ok": true,
+      "detail": "max 0.2385 px"
+    },
+    {
+      "name": "move drag updates the guide on every sampled pointermove (realtime)",
+      "ok": true,
+      "detail": "191,101,12,0"
+    },
+    {
+      "name": "move drag keeps the 1:1 pixel size",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "move drag records exactly one undo step at gesture start",
+      "ok": true,
+      "detail": "history 5 -> 6,6,6,6 -> 6"
+    },
+    {
+      "name": "drag perf: overlay redraw and pointer handling well under a frame",
+      "ok": true,
+      "detail": "fps 60.2, draw avg 0.507 ms max 0.90 (n=40), move avg 0.633 ms max 1.10 (n=40)"
+    },
+    {
+      "name": "H/X/Y fields set exact pixels (1:1 keeps W = H), one undo step per field",
+      "ok": true,
+      "detail": "{\"x\":100,\"y\":40,\"width\":400,\"height\":400} history +3"
+    },
+    {
+      "name": "SE handle resizes during the drag and stays 1:1",
+      "ok": true,
+      "detail": "400 -> 445 -> 501"
+    },
+    {
+      "name": "one Undo restores the rectangle before the resize gesture",
+      "ok": true,
+      "detail": "{\"x\":100,\"y\":40,\"width\":400,\"height\":400}"
+    },
+    {
+      "name": "Redo brings the resize back",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "orbit outside the rectangle still works while editing and leaves the guide alone",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "overlay stays on the capture frame from the orbited view",
+      "ok": true,
+      "detail": "max 0.1994 px"
+    },
+    {
+      "name": "run B (guide enabled) succeeds",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "images are uncropped and pixel-identical with the guide on (guide never rendered)",
+      "ok": true,
+      "detail": "{\"changed\":0,\"max\":0,\"bbox\":null}; PNG bytes differ only by the embedded prompt metadata"
+    },
+    {
+      "name": "crop_json matches the editor (schema, source, rect, pixel_rect, ratio)",
+      "ok": true,
+      "detail": "{\"x\":100,\"y\":40,\"width\":501,\"height\":501}"
+    },
+    {
+      "name": "crop_image is exactly the pixel_rect region of images",
+      "ok": true,
+      "detail": "{\"mismatch\":0,\"maxDiff\":0,\"pixels\":251001}"
+    },
+    {
+      "name": "crop_preview: full size, inside identical, cyan border, outside dimmed to 45 %",
+      "ok": true,
+      "detail": "{\"size\":[1280,720],\"thickness\":3,\"insideMismatch\":0,\"borderBad\":0,\"outsideBad\":0,\"meanOutsideError\":0.7479663703644068}"
+    },
+    {
+      "name": "Apply Crop Guide on images == crop_image (pixel-identical)",
+      "ok": true,
+      "detail": "{\"changed\":0,\"max\":0,\"bbox\":null}"
+    },
+    {
+      "name": "Apply Crop Guide on depth gives the same pixel_rect size",
+      "ok": true,
+      "detail": "501x501"
+    },
+    {
+      "name": "FOV/Distance changes keep the normalized guide and the overlay on the frame",
+      "ok": true,
+      "detail": "deviation 0.2113 px"
+    },
+    {
+      "name": "resize 1920x1080: Apply crops the same normalized rect at the new resolution",
+      "ok": true,
+      "detail": "{\"x\":150,\"y\":60,\"width\":752,\"height\":752} {\"mismatch\":0,\"maxDiff\":0,\"pixels\":565504}"
+    },
+    {
+      "name": "resize: the crop shows the same content as the native crop",
+      "ok": true,
+      "detail": "mean abs diff 0.12 / 255"
+    },
+    {
+      "name": "letterbox (documented limit): stretch crops a different region",
+      "ok": true,
+      "detail": "501x891, mean abs diff 30.86 vs resize 0.12"
+    },
+    {
+      "name": "letterbox with aspect_mismatch=error stops with a clear message",
+      "ok": true,
+      "detail": "Image is 1280 x 1280 but crop_json was made for 1280 x 720; the aspect ratios differ. A letterboxed, padded or center-cropped image needs the same geometric transform applied to the crop first. If the"
+    },
+    {
+      "name": "Pose Library save/load restores the tab's guide",
+      "ok": true,
+      "detail": "{\"schema_version\":1,\"enabled\":true,\"x\":0.078125,\"y\":0.05555555555555555,\"width\":0.39140625,\"height\":0.6958333333333333,\"aspect_ratio\":\"1:1\",\"custom_aspect_ratio\":[1,1],\"aspect_ratio_locked\":true}"
+    },
+    {
+      "name": "GRID with linked crop outputs stops with an explanation",
+      "ok": true,
+      "detail": "Pose Studio crop outputs (crop_json, crop_image, crop_preview) are available for Studio Image mode with LIST output; GRID output is not supported. Disconnect them or switch to Studio, Image mode and L"
+    },
+    {
+      "name": "run E before reload succeeds",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "workflow stores crop_guides without image data",
+      "ok": true,
+      "detail": "[{\"schema_version\":1,\"enabled\":true,\"x\":0.078125,\"y\":0.05555555555555555,\"width\":0.39140625,\"height\":0.6958333333333333,\"aspect_ratio\":\"1:1\",\"custom_aspect_ratio\":[1,1],\"aspect_ratio_locked\":true}]"
+    },
+    {
+      "name": "workflow reload restores the guide exactly",
+      "ok": true,
+      "detail": "{\"x\":100,\"y\":40,\"width\":501,\"height\":501}"
+    },
+    {
+      "name": "RUN after reload reproduces images and crop_image pixel-identically",
+      "ok": true,
+      "detail": "{\"changed\":0,\"max\":0,\"bbox\":null} {\"changed\":0,\"max\":0,\"bbox\":null}"
+    },
+    {
+      "name": "evidence guide frames both characters at 3:4",
+      "ok": true,
+      "detail": "{\"x0\":559,\"y0\":387,\"x1\":668,\"y1\":520} in {\"x\":546,\"y\":364,\"width\":135,\"height\":180}"
+    },
+    {
+      "name": "evidence run: crop_image is the framed region",
+      "ok": true,
+      "detail": "{\"mismatch\":0,\"maxDiff\":0,\"pixels\":24300}"
+    },
+    {
+      "name": "no page errors",
+      "ok": true,
+      "detail": ""
+    }
+  ]
+}
