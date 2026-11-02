@@ -1,0 +1,127 @@
+{
+  "layers": [
+    {
+      "name": "perspective-grid.png",
+      "width": 800,
+      "height": 800,
+      "opacity": 0.35,
+      "x": -0.05,
+      "y": -0.05,
+      "scale": 0.9,
+      "rotation": -8,
+      "flipX": false
+    },
+    {
+      "name": "gesture-sketch.png",
+      "width": 600,
+      "height": 900,
+      "opacity": 0.6,
+      "x": 0.02,
+      "y": -0.03,
+      "scale": 0.8,
+      "rotation": 12,
+      "flipX": false
+    },
+    {
+      "name": "color-study.png",
+      "width": 900,
+      "height": 600,
+      "opacity": 0.3,
+      "x": 0.22,
+      "y": 0.24,
+      "scale": 0.55,
+      "rotation": 18,
+      "flipX": false
+    }
+  ],
+  "edit_mode": true,
+  "selected": "gesture-sketch.png",
+  "output": {
+    "width": 1024,
+    "height": 1024
+  },
+  "widget_rect": {
+    "x": 70,
+    "y": 116,
+    "width": 1380,
+    "height": 814
+  },
+  "timings": {
+    "zoom_0.6": {
+      "pointer_handler_ms": {
+        "n": 61,
+        "p50": 0.2,
+        "p95": 0.3,
+        "max": 0.5
+      },
+      "viewport_render_ms": {
+        "n": 63,
+        "p50": 0.6,
+        "p95": 0.9,
+        "max": 1
+      },
+      "frame_interval_ms": {
+        "n": 135,
+        "p50": 16.7,
+        "p95": 16.7,
+        "max": 33.3
+      }
+    },
+    "zoom_1": {
+      "pointer_handler_ms": {
+        "n": 61,
+        "p50": 0.2,
+        "p95": 0.3,
+        "max": 0.3
+      },
+      "viewport_render_ms": {
+        "n": 62,
+        "p50": 0.7,
+        "p95": 0.8,
+        "max": 0.9
+      },
+      "frame_interval_ms": {
+        "n": 143,
+        "p50": 16.7,
+        "p95": 33.3,
+        "max": 33.4
+      }
+    },
+    "zoom_1.4": {
+      "pointer_handler_ms": {
+        "n": 61,
+        "p50": 0.2,
+        "p95": 0.3,
+        "max": 0.5
+      },
+      "viewport_render_ms": {
+        "n": 62,
+        "p50": 0.7,
+        "p95": 0.9,
+        "max": 1
+      },
+      "frame_interval_ms": {
+        "n": 128,
+        "p50": 16.7,
+        "p95": 16.8,
+        "max": 33.4
+      }
+    }
+  },
+  "serialization": {
+    "with_three_layers": {
+      "sync_ms": 4.32,
+      "pose_data_chars": 111165,
+      "layer_chars": [
+        72159,
+        19615,
+        14291
+      ]
+    },
+    "without_layers": {
+      "sync_ms": 4.33,
+      "pose_data_chars": 4495
+    }
+  },
+  "page_errors": []
+}
