@@ -272,6 +272,124 @@ test("depth hints choose the side of the camera and flips keep the 2D position",
     }
 });
 
+test("a Depth amount sets the joint's tilt from its parent toward or away from the camera; Pinned holds it harder", () => {
+    resetRig();
+    setBones({ upperarm_l: [0, -0.5, 0], lowerarm_l: 0.6 });
+    const p = projector();
+    const arm = model();
+    const truth = F.projectFittingJoints(arm, p);
+    const tilt = F.markerDepthAmount(arm, p, "l_elbow");
+    assert.ok(Math.abs(tilt) > 0.2, `the upper arm is tilted (${tilt})`);
+    assert.equal(F.markerDepthAmount(arm, p, "neck"), null, "markers without a parent have no relative depth");
+    resetRig();
+    const rest = model();
+    const arms = amount => markersFrom(truth, ["l_shoulder", "l_elbow", "l_wrist"]).map(marker => (marker.id === "l_elbow" ? { ...marker, depthAmount: amount } : marker));
+    // Both depths that project onto the same 2D markers are reached, each from the rest pose.
+    for (const amount of [tilt, -tilt]) {
+        const fit = F.solvePoseFitting(rest, p, arms(amount), { maxIterations: 80, bones: ["upperarm_l", "lowerarm_l"] });
+        const got = F.markerDepthAmount(rest, p, "l_elbow", fit.state);
+        assert.ok(Math.abs(got - amount) < 0.03, `amount ${amount}: got ${got}`);
+        assert.ok(fit.maxError < 1, `amount ${amount}: ${fit.maxError}px`);
+    }
+    // An amount the 2D markers cannot give is a soft term against them; Pinned (x10) wins more of it.
+    const steep = Math.sign(tilt) * 0.95;
+    const soft = F.solvePoseFitting(rest, p, arms(steep), { maxIterations: 80, bones: ["upperarm_l", "lowerarm_l"] });
+    const pinned = F.solvePoseFitting(rest, p, arms(steep).map(marker => (marker.id === "l_elbow" ? { ...marker, pinned: true } : marker)), { maxIterations: 80, bones: ["upperarm_l", "lowerarm_l"] });
+    const miss = state => Math.abs(F.markerDepthAmount(rest, p, "l_elbow", state) - steep);
+    assert.ok(miss(pinned.state) < miss(soft.state), `pinned ${miss(pinned.state)} < ${miss(soft.state)}`);
+    // An amount replaces a stored sign-only hint on the same marker.
+    const both = F.solvePoseFitting(rest, p, arms(-tilt).map(marker => (marker.id === "l_elbow" ? { ...marker, depth: tilt < 0 ? "near" : "far" } : marker)), { maxIterations: 80, bones: ["upperarm_l", "lowerarm_l"] });
+    assert.ok(Math.abs(F.markerDepthAmount(rest, p, "l_elbow", both.state) + tilt) < 0.03);
+});
+
+/** Crouching, legs crossing in the capture view, arms bent: the pose from the flattening report. */
+function crouch() {
+    resetRig();
+    const D = Math.PI / 180;
+    viewer.bones.thigh_l.rotation.set(-95 * D, 0, 18 * D);
+    viewer.bones.thigh_r.rotation.set(-80 * D, 0, -22 * D);
+    viewer.bones.upperarm_l.rotation.set(40 * D, 0, 60 * D);
+    viewer.bones.upperarm_r.rotation.set(-30 * D, 30 * D, -50 * D);
+    viewer.skinnedMesh.updateMatrixWorld(true);
+    const bent = model();
+    for (const [name, deg] of [["calf_l", 120], ["calf_r", 110], ["lowerarm_l", 70], ["lowerarm_r", 90]]) {
+        const axis = bent.bones[bent.index.get(name)].hingeAxis;
+        viewer.bones[name].quaternion.premultiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(...axis), deg * D));
+    }
+    viewer.skinnedMesh.updateMatrixWorld(true);
+    const m = model();
+    const p = projector();
+    const ids = F.POSE_FITTING_BODY_MARKER_IDS;
+    const segments = ids.filter(id => F.POSE_FITTING_MARKERS.find(def => def.id === id).parent);
+    const measure = state => {
+        const joints = F.projectFittingJoints(m, p, state);
+        const depths = ids.map(id => joints[id].depth);
+        const mean = depths.reduce((sum, value) => sum + value, 0) / depths.length;
+        return {
+            tilt: segments.reduce((sum, id) => sum + Math.abs(F.markerDepthAmount(m, p, id, state)), 0) / segments.length,
+            spread: Math.sqrt(depths.reduce((sum, value) => sum + (value - mean) ** 2, 0) / depths.length),
+            tilts: Object.fromEntries(segments.map(id => [id, F.markerDepthAmount(m, p, id, state)])),
+        };
+    };
+    return { m, p, ids, segments, measure, start: F.captureFittingState(m), options: { scope: "body", poseStiffness: 4 * F.projectionPriorScale(m, p), tolerance: 1e-7 } };
+}
+
+test("crouching pose: repeated Fits on a slightly larger reference flatten it with Near/Far, not with Depth amounts", () => {
+    const { m, p, ids, segments, measure, start, options } = crouch();
+    const joints = F.projectFittingJoints(m, p, start);
+    // Hand-placed reference 12% larger than the mannequin: the rigid figure can only stretch its
+    // projection by turning segments toward the image plane.
+    const cx = (joints.l_hip.x + joints.r_hip.x) / 2, cy = (joints.l_hip.y + joints.r_hip.y) / 2;
+    const tilts = measure(start).tilts;
+    const run = hint => {
+        const markers = ids.map(id => ({ id, x: cx + (joints[id].x - cx) * 1.12, y: cy + (joints[id].y - cy) * 1.12, ...(segments.includes(id) ? hint(tilts[id]) : {}) }));
+        let state = start;
+        const out = [];
+        for (let i = 1; i <= 10; i++) {
+            state = F.solvePoseFitting(m, p, markers, { ...options, anchor: state, initialState: state, maxIterations: 80 }).state;
+            if (i === 1 || i === 10) out.push(measure(state));
+        }
+        return out;
+    };
+    const before = measure(start);
+    const plain = run(() => ({}));
+    const sideOnly = run(tilt => ({ depth: tilt < 0 ? "near" : "far" }));
+    const amounts = run(tilt => ({ depthAmount: tilt }));
+    const numbers = `start tilt ${before.tilt.toFixed(3)} spread ${before.spread.toFixed(3)}; Auto ${plain[1].tilt.toFixed(3)}/${plain[1].spread.toFixed(3)}; Near/Far ${sideOnly[1].tilt.toFixed(3)}/${sideOnly[1].spread.toFixed(3)}; amounts ${amounts[0].tilt.toFixed(3)} -> ${amounts[1].tilt.toFixed(3)}/${amounts[1].spread.toFixed(3)}`;
+    assert.ok(plain[1].tilt < before.tilt - 0.07 && sideOnly[1].tilt < before.tilt - 0.07, `without amounts the body flattens: ${numbers}`);
+    assert.ok(Math.abs(amounts[1].tilt - before.tilt) < 0.04 && Math.abs(amounts[1].spread - before.spread) < 0.06 * before.spread, `amounts keep the depth: ${numbers}`);
+    assert.ok(Math.abs(amounts[1].tilt - amounts[0].tilt) < 0.005, `and it does not drift between Fit 1 and Fit 10: ${numbers}`);
+});
+
+test("keep camera depth: dragging one marker out of reach no longer flattens the joints that are not dragged", () => {
+    const { m, p, ids, segments, measure, start, options } = crouch();
+    const joints = F.projectFittingJoints(m, p, start);
+    const cx = (joints.l_hip.x + joints.r_hip.x) / 2, cy = (joints.l_hip.y + joints.r_hip.y) / 2;
+    const drag = (id, keep) => {
+        const dx = joints[id].x - cx, dy = joints[id].y - cy, d = Math.hypot(dx, dy);
+        const to = { x: joints[id].x + dx / d * 60, y: joints[id].y + dy / d * 60 };
+        const markers = (f, dragging) => ids.map(other => (other === id
+            ? { id, x: joints[id].x + (to.x - joints[id].x) * f, y: joints[id].y + (to.y - joints[id].y) * f, dragging }
+            : { id: other, x: joints[other].x, y: joints[other].y }));
+        const extra = keep ? { keepDepth: true, depthFree: [id] } : {};
+        let state = start;
+        for (let frame = 1; frame <= 12; frame++) state = F.solvePoseFitting(m, p, markers(frame / 12, true), { ...options, ...extra, anchor: start, initialState: state, maxIterations: 8 }).state;
+        const result = F.solvePoseFitting(m, p, markers(1, false), { ...options, ...extra, anchor: start, initialState: state, maxIterations: 80 });
+        const after = measure(result.state).tilts, before = measure(start).tilts;
+        const worst = Math.max(...segments.filter(other => other !== id).map(other => Math.abs(after[other] - before[other])));
+        const reached = F.projectFittingJoints(m, p, result.state)[id];
+        return { worst, miss: Math.hypot(reached.x - to.x, reached.y - to.y) };
+    };
+    let worstOld = 0, worstNew = 0;
+    for (const id of ["l_wrist", "r_ankle", "l_knee", "head"]) {
+        const old = drag(id, false), kept = drag(id, true);
+        worstOld = Math.max(worstOld, old.worst);
+        worstNew = Math.max(worstNew, kept.worst);
+        assert.ok(kept.miss < old.miss + 3, `${id}: the dragged marker still reaches (${kept.miss.toFixed(1)} vs ${old.miss.toFixed(1)} px)`);
+    }
+    assert.ok(worstNew < 0.6 * worstOld, `largest tilt change of an untouched joint: ${worstOld.toFixed(2)} -> ${worstNew.toFixed(2)}`);
+});
+
 test("camera FOV and angle changes are evaluated with the real capture projection", () => {
     resetRig();
     viewer.updateCaptureCamera(1024, 768, 1.3, 0, 0, 30, -15);
@@ -354,7 +472,7 @@ test("stored fitting data is validated, clamped and backward compatible", () => 
         source: { type: "openpose", width: 512, height: 512, format: "COCO-18" },
         unknown: true,
     });
-    assert.deepEqual(state.markers.l_wrist, { u: 0.5, v: 0.25, enabled: true, pinned: true, weight: 10, confidence: 1, depth: "auto", locked: false, hidden: false });
+    assert.deepEqual(state.markers.l_wrist, { u: 0.5, v: 0.25, enabled: true, pinned: true, weight: 10, confidence: 1, depth: "auto", depthAmount: null, locked: false, hidden: false });
     assert.equal(state.markers.r_wrist.enabled, false, "a marker without coordinates cannot be enabled");
     assert.equal(state.markers.bogus, undefined);
     assert.deepEqual(state.settings, { scope: "body", moveRoot: false, stiffness: 0.05, showMarkers: false, autoRefit: false, fingertips: false });
@@ -368,6 +486,12 @@ test("stored fitting data is validated, clamped and backward compatible", () => 
     assert.equal(F.normalizeFittingState({ version: 3, markers: point, settings: { scope: "body" } }).settings.scope, "body");
     assert.equal(F.normalizeFittingState({ version: 4, markers: point, settings: { scope: "limbs" } }).settings.scope, "limbs");
     assert.equal(F.normalizeFittingState({ version: 4, markers: point, settings: {} }).settings.scope, "body");
+    // Version 6 Depth amount: clamped to -1..1; absent or invalid = Auto (null); a
+    // stored Near / Far without an amount stays a sign-only hint.
+    const depthOf = marker => F.normalizeFittingState({ version: 6, markers: { l_elbow: { u: 0.5, v: 0.5, ...marker } } }).markers.l_elbow;
+    assert.deepEqual([depthOf({ depthAmount: 0.4 }).depthAmount, depthOf({ depthAmount: -7 }).depthAmount, depthOf({ depthAmount: "x" }).depthAmount, depthOf({}).depthAmount], [0.4, -1, null, null]);
+    assert.deepEqual([depthOf({ depth: "near" }).depth, depthOf({ depth: "near" }).depthAmount], ["near", null]);
+    assert.equal(F.normalizeFittingState({ version: 5, markers: { l_elbow: { u: 0.5, v: 0.5, depth: "far" } } }).markers.l_elbow.depth, "far", "version 5 Near/Far loads unchanged");
     assert.equal(state.unknown, undefined);
     assert.deepEqual(Object.keys(state.markers), F.POSE_FITTING_MARKER_IDS);
 });

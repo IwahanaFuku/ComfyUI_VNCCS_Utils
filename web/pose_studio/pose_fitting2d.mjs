@@ -17,7 +17,13 @@
  * - E_joint_limits: anatomical swing/twist ranges and one-axis elbow/knee
  *   hinges that cannot hyperextend or bend sideways.
  * - E_bend: optional per-marker depth hints (joint toward / away from the
- *   camera relative to its parent joint).
+ *   camera relative to its parent joint), either a sign only (legacy Near /
+ *   Far) or a Depth amount: the segment's tilt toward (-) or away from (+) the
+ *   camera, measured in pixels at the figure's scale.
+ * - E_keep: a weak "keep camera depth" prior during marker drags and live
+ *   slider gestures. Joints not being dragged and without a Depth amount keep
+ *   the camera-relative depth to their parent joint that they had when the
+ *   gesture started, so dragging one marker does not flatten the others.
  *
  * Optimized degrees of freedom are local bone rotations (and, only when the
  * user enables it, the pelvis translation). Bone lengths and body proportions
@@ -37,9 +43,11 @@
  * loads unchanged; "all" becomes Fingertips on. Version 4 makes Whole body the
  * default Optimize scope; a stored scope is always kept, and pre-4 data without
  * one keeps the old "limbs" default. Version 5 adds per-marker `locked` and
- * `hidden` flags (older data: unlocked and visible).
+ * `hidden` flags (older data: unlocked and visible). Version 6 adds the
+ * per-marker Depth amount `depthAmount` (null = Auto, or -1..1). A stored
+ * "near" / "far" keeps working as a sign-only hint until an amount is set.
  */
-export const POSE_FITTING_VERSION = 5;
+export const POSE_FITTING_VERSION = 6;
 
 const DEG = Math.PI / 180;
 const RAD = 180 / Math.PI;
@@ -249,8 +257,25 @@ export const POSE_FITTING_DEFAULTS = Object.freeze({
     poseStiffness: 4,
     /** Joint-limit penalty in px^2 per degree^2 of violation. */
     limitWeight: 400,
-    /** Depth-hint penalty in px^2 per world unit^2 of violation. */
+    /** Legacy Near / Far hint penalty in px^2 per world unit^2 of violation. */
     depthWeight: 2500,
+    /**
+     * Depth amount term: (camera-forward offset of the joint from its parent
+     * - amount * segment length), converted to pixels with the figure's pixels
+     * per world unit, times sqrt(this * marker weight). At 1 a depth error is
+     * as costly as the same distance off target in the image; Pinned (x10)
+     * and dragging (x4) strengthen it like the 2D term.
+     */
+    depthAmountWeight: 1,
+    /**
+     * Keep-camera-depth prior (only with `keepDepth: true`: marker drags and
+     * live slider gestures), same pixel units: joints that are not dragged and
+     * have no Depth amount keep their forward offset from the parent joint
+     * from the start of the gesture. At 0.1 a 10 px depth change costs as much
+     * as ~3 px off target, so a drag no longer flattens the rest of the body,
+     * while Fit Pose (without it) can still change foreshortening freely.
+     */
+    depthKeepWeight: 0.1,
     /** Root translation prior: px^2 per world unit^2 (image plane / depth). */
     rootStiffness: 25,
     rootDepthStiffness: 400,
@@ -264,6 +289,8 @@ export const POSE_FITTING_DEFAULTS = Object.freeze({
 });
 
 export const POSE_FITTING_DEPTH_HINTS = Object.freeze(["auto", "near", "far"]);
+/** Depth amount range: -1 = straight toward the camera, +1 = straight away (relative to the parent joint). */
+export const POSE_FITTING_DEPTH_AMOUNT_LIMIT = 1;
 export const POSE_FITTING_SCOPES = Object.freeze(["limbs", "body"]);
 
 // =====================================================================
@@ -709,17 +736,27 @@ export const POSE_FITTING_REFERENCE_PX_PER_UNIT = 512 / Math.tan(Math.PI / 12) /
  * of the figure's pixels per world unit to the default capture's.
  */
 export function projectionPriorScale(model, projector, state = null) {
+    const ratio = figurePixelsPerUnit(model, projector, state) / POSE_FITTING_REFERENCE_PX_PER_UNIT;
+    return finite(ratio) && ratio > 0 ? clamp(ratio * ratio, 0.01, 100) : 1;
+}
+
+/**
+ * Output pixels per world unit at the figure (the neck / hips centre, across
+ * the view). Depth terms use it to measure depth in the same pixels as the
+ * markers. NaN when it cannot be measured.
+ */
+export function figurePixelsPerUnit(model, projector, state = null) {
     const joints = projectFittingJoints(model, projector, state);
     const points = ["neck", "l_hip", "r_hip"].map(id => joints[id]?.world).filter(Boolean);
-    if (!points.length || !projector?.forward) return 1;
+    if (!points.length || !projector?.forward) return NaN;
     const centre = [0, 1, 2].map(axis => points.reduce((sum, point) => sum + point[axis], 0) / points.length);
     const forward = projector.forward;
     const side = normalize(cross(forward, Math.abs(forward[1]) < 0.9 ? [0, 1, 0] : [1, 0, 0]));
     const a = projector.project(centre);
     const b = projector.project([centre[0] + side[0], centre[1] + side[1], centre[2] + side[2]]);
-    if (!a.valid || !b.valid) return 1;
-    const ratio = Math.hypot(b.x - a.x, b.y - a.y) / POSE_FITTING_REFERENCE_PX_PER_UNIT;
-    return finite(ratio) && ratio > 0 ? clamp(ratio * ratio, 0.01, 100) : 1;
+    if (!a.valid || !b.valid) return NaN;
+    const value = Math.hypot(b.x - a.x, b.y - a.y);
+    return finite(value) && value > 0 ? value : NaN;
 }
 
 // =====================================================================
@@ -883,10 +920,31 @@ function buildProblem(model, projector, markers, options) {
         if (marker.pinned) weight *= settings.pinFactor;
         if (marker.dragging) weight *= settings.dragFactor;
         if (weight <= 0) continue;
-        active.push({ id: marker.id, index, x, y, weight, depth: POSE_FITTING_DEPTH_HINTS.includes(marker.depth) ? marker.depth : "auto" });
+        const amount = normalizeDepthAmount(marker.depthAmount);
+        active.push({
+            id: marker.id, index, x, y, weight, dragging: marker.dragging === true, amount,
+            // An amount replaces the sign-only hint.
+            depth: amount === null && POSE_FITTING_DEPTH_HINTS.includes(marker.depth) ? marker.depth : "auto",
+        });
     }
     const dofs = buildDofs(model, active, settings);
-    return { settings, active, dofs };
+    // Keep-camera-depth prior (body stage): every body joint with a parent
+    // marker, except the dragged ones and those with their own Depth amount.
+    const free = new Set(Array.isArray(settings.depthFree) ? settings.depthFree : []);
+    const skip = new Set(active.filter(marker => marker.dragging || marker.amount !== null || free.has(marker.id)).map(marker => marker.index));
+    const keep = settings.keepDepth !== true || !(settings.depthKeepWeight > 0) ? [] : POSE_FITTING_MARKERS
+        .map((def, index) => ({ def, index }))
+        .filter(({ def, index }) => def.group === "body" && !free.has(def.id) && model.markers[index]?.bone >= 0
+            && model.markers[index].parent >= 0 && !skip.has(index))
+        .map(({ index }) => index);
+    return { settings, active, dofs, keep, pxPerUnit: POSE_FITTING_REFERENCE_PX_PER_UNIT, anchorDepths: null };
+}
+
+/** Stored / UI Depth amount: null (Auto) or a number clamped to -1..1. */
+export function normalizeDepthAmount(value) {
+    if (value === null || value === undefined || value === "") return null;
+    const number = Number(value);
+    return Number.isFinite(number) ? clamp(number, -POSE_FITTING_DEPTH_AMOUNT_LIMIT, POSE_FITTING_DEPTH_AMOUNT_LIMIT) : null;
 }
 
 function evaluate(model, projector, problem, state, anchor, wantJacobian) {
@@ -968,6 +1026,60 @@ function evaluate(model, projector, problem, state, anchor, wantJacobian) {
             }
         }
         push(sqrtDepth * violation, row);
+    }
+
+    // Depth amounts: forward offset from the parent joint = amount * segment
+    // length, in pixels at the figure's scale (see depthAmountWeight).
+    const forward = projector.forward;
+    const pxPerUnit = problem.pxPerUnit;
+    for (const marker of active) {
+        if (marker.amount === null) continue;
+        const parentIndex = model.markers[marker.index].parent;
+        if (parentIndex < 0 || !points[parentIndex]) continue;
+        const offset = sub(points[marker.index], points[parentIndex]);
+        const length = len(offset);
+        if (!(length > 1e-9)) continue;
+        const s = Math.sqrt(settings.depthAmountWeight * marker.weight) * pxPerUnit;
+        let row = null;
+        if (wantJacobian) {
+            row = new Float64Array(n);
+            const unit = offset.map(value => value / length);
+            const direction = forward.map((value, k) => value - marker.amount * unit[k]);
+            const a = pointDerivative(marker.index), b = pointDerivative(parentIndex);
+            for (let k = 0; k < n; k++) {
+                const ga = a[k] ? dot(direction, a[k]) : 0;
+                const gb = b[k] ? dot(direction, b[k]) : 0;
+                row[k] = s * (ga - gb);
+            }
+        }
+        push(s * (dot(offset, forward) - marker.amount * length), row);
+    }
+
+    // Keep camera depth: joints that nothing pulls in depth keep the forward
+    // offset from their parent joint that they had at the anchor.
+    if (problem.keep.length) {
+        if (!problem.anchorDepths || problem.anchorDepths.anchor !== anchor) {
+            const anchorPoints = markerPoints(model, forwardKinematics(model, anchor));
+            problem.anchorDepths = {
+                anchor,
+                values: problem.keep.map(index => dot(sub(anchorPoints[index], anchorPoints[model.markers[index].parent]), forward)),
+            };
+        }
+        const s = Math.sqrt(settings.depthKeepWeight) * pxPerUnit;
+        problem.keep.forEach((index, i) => {
+            const parentIndex = model.markers[index].parent;
+            let row = null;
+            if (wantJacobian) {
+                row = new Float64Array(n);
+                const a = pointDerivative(index), b = pointDerivative(parentIndex);
+                for (let k = 0; k < n; k++) {
+                    const ga = a[k] ? dot(forward, a[k]) : 0;
+                    const gb = b[k] ? dot(forward, b[k]) : 0;
+                    row[k] = s * (ga - gb);
+                }
+            }
+            push(s * (dot(sub(points[index], points[parentIndex]), forward) - problem.anchorDepths.values[i]), row);
+        });
     }
 
     // Pose prior relative to the anchor pose.
@@ -1269,6 +1381,19 @@ function mergeStageResults(stages, state, started) {
 function solveStage(model, projector, markers, options, started) {
     const problem = buildProblem(model, projector, markers, options);
     const { settings, dofs } = problem;
+    const initialForScale = options.initialState || null;
+    const figurePx = figurePixelsPerUnit(model, projector, initialForScale);
+    if (finite(figurePx)) problem.pxPerUnit = figurePx;
+    if (problem.keep.length) {
+        const moved = new Set();
+        for (const dof of dofs) moved.add(dof.bone);
+        // A joint's camera-forward offset from its parent changes only when a
+        // DOF at or above the joint's bone moves (ancestors turn the segment too).
+        problem.keep = problem.keep.filter(index => {
+            for (let b = model.markers[index].bone; b >= 0; b = model.bones[b].parent) if (moved.has(b)) return true;
+            return false;
+        });
+    }
     const method = ["lm", "dls", "jt"].includes(options.method) ? options.method : "lm";
     const maxIterations = Math.max(0, Math.floor(options.maxIterations ?? 30));
     const tolerance = options.tolerance ?? 1e-9;
@@ -1619,6 +1744,21 @@ function flipHandPoint(model, projector, markerId, state, { allowViolation = fal
     return mirrored.state;
 }
 
+/**
+ * Depth amount of a marker in the given state: the camera-forward offset of
+ * its joint from the parent joint divided by their distance (-1 toward the
+ * camera .. +1 away). Null for markers without a parent (Neck, hips).
+ */
+export function markerDepthAmount(model, projector, markerId, state = null) {
+    const index = MARKER_INDEX.get(markerId);
+    const parent = index === undefined ? -1 : model.markers[index].parent;
+    if (parent < 0 || model.markers[index].bone < 0) return null;
+    const points = markerPoints(model, forwardKinematics(model, state));
+    const offset = sub(points[index], points[parent]);
+    const length = len(offset);
+    return length > 1e-9 ? clamp(dot(offset, projector.forward) / length, -1, 1) : null;
+}
+
 /** Depth relation of a marker's joint to its parent joint in the given state. */
 export function markerDepthRelation(model, projector, markerId, state = null) {
     const index = MARKER_INDEX.get(markerId);
@@ -1637,7 +1777,7 @@ export function defaultFittingSettings() {
 }
 
 export function defaultFittingMarker() {
-    return { u: null, v: null, enabled: false, pinned: false, weight: 1, confidence: 1, depth: "auto", locked: false, hidden: false };
+    return { u: null, v: null, enabled: false, pinned: false, weight: 1, confidence: 1, depth: "auto", depthAmount: null, locked: false, hidden: false };
 }
 
 export function createFittingState() {
@@ -1674,6 +1814,9 @@ export function normalizeFittingState(raw) {
             weight: normalizeNumber(source.weight, 1, 0, 10),
             confidence: normalizeNumber(source.confidence, 1, 0, 1),
             depth: POSE_FITTING_DEPTH_HINTS.includes(source.depth) ? source.depth : "auto",
+            // Version 6: Depth amount (null = Auto). Older data has none, so a
+            // stored "near" / "far" keeps acting as a sign-only hint.
+            depthAmount: normalizeDepthAmount(source.depthAmount),
             // Version 5: panel Lock / Hide. Absent in older data: unlocked, visible.
             locked: source.locked === true,
             hidden: source.hidden === true,
@@ -1730,6 +1873,7 @@ export function fittingStateToSolverMarkers(state, frame, extra = {}) {
             weight: marker.weight,
             confidence: marker.confidence,
             depth: marker.depth,
+            depthAmount: marker.depthAmount ?? null,
             dragging: extra.dragging === id,
         };
     }).filter(Boolean);

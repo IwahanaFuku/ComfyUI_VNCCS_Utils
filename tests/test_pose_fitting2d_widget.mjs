@@ -22,11 +22,15 @@ function fittingScene() {
     viewer.camera.aspect = 1;
     viewer.camera.updateProjectionMatrix();
     const queue = [];
+    const timers = [];
     const controller = new PoseFitting2DController(w, {
         document,
         requestAnimationFrame: callback => { queue.push(callback); return queue.length; },
         cancelAnimationFrame: () => {},
+        setTimeout: callback => { timers.push(callback); return timers.length; },
+        clearTimeout: id => { timers[id - 1] = null; },
     });
+    const flushTimers = () => { for (let i = 0; i < timers.length; i++) { const callback = timers[i]; timers[i] = null; callback?.(); } };
     controller.buildSection(new Element("div"));
     controller.attachViewport(container, canvas);
     w.poseFitting2D = controller;
@@ -47,7 +51,7 @@ function fittingScene() {
         container.dispatchEvent(event);
         return event;
     };
-    return { ...scene, container, controller, runFrames, handWorld, projected, pointer, queue };
+    return { ...scene, container, controller, runFrames, handWorld, projected, pointer, queue, flushTimers };
 }
 
 test("dragging a marker moves the mannequin on every frame before release and records one undo step", () => {
@@ -747,9 +751,13 @@ test("Flip on a selected L Hand marker mirrors the wrist direction as one undo s
     // The mirror lands ~2 degrees past the wrist limit here; the refit settles it inside within a pixel or two.
     assert.ok(Math.hypot(after.x - before.x, after.y - before.y) < 2, "the Hand point keeps its 2D position");
     for (const [name, q] of Object.entries(fingers)) assert.ok(viewer.bones[name].quaternion.angleTo(q) < 1e-9, `${name} untouched`);
-    assert.ok(["near", "far"].includes(controller.state.markers.l_hand.depth), "the Depth hint holds the new side");
-    assert.equal(e.depth.value, controller.state.markers.l_hand.depth);
-    assert.match(controller.message, /L Hand: depth flipped/);
+    // Flip sets the mirrored tilt as the Depth amount, which holds the new side.
+    const amount = controller.state.markers.l_hand.depthAmount;
+    assert.ok(Number.isFinite(amount) && Math.abs(amount) > 0.05, `the Depth amount is set (${amount})`);
+    assert.ok(Math.abs(controller.measuredDepthAmount("l_hand") - amount) < 0.05, "the refit keeps the mirrored depth");
+    assert.equal(controller.state.markers.l_hand.depth, "auto");
+    assert.equal(e.depthInput.value, String(Math.round(amount * 100)));
+    assert.match(controller.message, /L Hand: depth flipped to [+-]\d+%/);
     viewer.undo();
     assert.ok(viewer.bones.hand_l.quaternion.angleTo(handBefore) < 1e-9, "undo restores the wrist");
     // At rest the mirrored hand would need more side bend than the wrist has.
@@ -897,4 +905,174 @@ test("hit testing skips locked and hidden markers, so the overlapping one undern
     assert.deepEqual({ u: controller.state.markers.l_elbow.u, v: controller.state.markers.l_elbow.v }, before, "Reset Targets leaves a locked marker");
     controller.fitPose();
     assert.ok(controller.lastResult.markers.some(item => item.id === "l_elbow"), "locked markers are still solved");
+});
+
+test("Depth slider: Auto shows the current tilt; a drag sets the amount live as one undo step; the number field and reset", () => {
+    const s = fittingScene();
+    const { controller, viewer, runFrames } = s;
+    controller.setActive(true);
+    controller.select("l_elbow");
+    const e = controller.elements;
+    assert.equal(e.depthInput.value, "", "Auto: the number field is empty");
+    assert.match(e.depthNote.textContent, /^Auto · now [+-]?\d+%$/);
+    assert.equal(e.depth.disabled, false);
+    const start = controller.measuredDepthAmount("l_elbow");
+    const history = viewer.history.length;
+    e.depth.emit("pointerdown");
+    let previous = start;
+    for (const value of [-20, -40, -60]) {
+        e.depth.value = String(value);
+        e.depth.emit("input");
+        assert.ok(runFrames() >= 1, "the slider schedules a solve frame");
+        assert.equal(controller.state.markers.l_elbow.depthAmount, value / 100);
+        const now = controller.measuredDepthAmount("l_elbow");
+        assert.ok(now < previous - 0.01, `${value}%: the elbow turns toward the camera while the slider moves (${previous} -> ${now})`);
+        previous = now;
+    }
+    e.depth.emit("change");
+    assert.equal(viewer.history.length, history + 1, "one undo step for the gesture");
+    assert.equal(controller.live, null);
+    assert.equal(e.depthInput.value, "-60");
+    assert.match(e.depthNote.textContent, /^Set -60% · now /);
+    // Exact entry goes through the slider.
+    e.depthInput.value = "25";
+    e.depthInput.emit("input");
+    e.depthInput.emit("change");
+    assert.equal(controller.state.markers.l_elbow.depthAmount, 0.25);
+    assert.equal(viewer.history.length, history + 2);
+    // ↺ returns to Auto in one undo step; Undo brings the amount back.
+    e.depthReset.emit("click");
+    assert.equal(controller.state.markers.l_elbow.depthAmount, null);
+    assert.equal(controller.state.markers.l_elbow.depth, "auto");
+    assert.equal(e.depthInput.value, "");
+    assert.equal(viewer.history.length, history + 3);
+    viewer.undo();
+    assert.equal(viewer.fitting2d.markers.l_elbow.depthAmount, 0.25);
+    // No parent joint: no relative depth.
+    controller.select("neck");
+    assert.equal(controller.elements.depth.disabled, true);
+    assert.equal(controller.elements.depthReset.disabled, true);
+    assert.match(controller.elements.depthNote.textContent, /No parent joint/);
+    const saved = JSON.parse(s.node.widgets[0].value).characters[0].poses[0].fitting2d;
+    assert.equal(saved.version, 6);
+});
+
+/** Orbit the editor camera around its target about the vertical axis. */
+function orbitEditor(s, radians) {
+    const { viewer, THREE } = s;
+    const target = viewer.orbit.target.clone();
+    viewer.camera.position.sub(target).applyAxisAngle(new THREE.Vector3(0, 1, 0), radians).add(target);
+    viewer.camera.lookAt(target);
+    viewer.camera.updateMatrixWorld(true);
+}
+
+test("orbited view: markers sit on their capture rays; dragging one slides only its depth, every frame, at canvas zoom 0.6 / 1 / 1.4", () => {
+    for (const zoom of [0.6, 1, 1.4]) {
+        const s = fittingScene();
+        const { controller, viewer, pointer, runFrames } = s;
+        const left = 30, top = 20;
+        viewer.canvas.getBoundingClientRect = () => ({ left, top, width: VIEW * zoom, height: VIEW * zoom });
+        controller.setActive(true);
+        assert.equal(controller.isOrbitedView(), false, "the default editor view looks like the capture camera");
+        orbitEditor(s, 0.9);
+        assert.equal(controller.isOrbitedView(), true);
+        controller.redraw();
+        const lines = controller.overlay.drawCommands.filter(command => command.method === "lineTo").length;
+        assert.ok(lines >= 16 * 2, `zoom ${zoom}: a ray line per marker plus the skeleton (${lines})`);
+        const toClient = point => ({ x: left + point.x * zoom, y: top + point.y * zoom });
+        const handles = controller.depthHandles();
+        const elbow = handles.l_elbow;
+        // The handle is on the capture ray of the 2D target, at the joint's current depth (Auto).
+        const ray = controller.captureRay(controller.state.markers.l_elbow.u, controller.state.markers.l_elbow.v);
+        assert.ok(elbow.handle.clone().sub(ray.origin).cross(ray.direction).length() < 1e-6, "the handle lies on the capture ray");
+        assert.ok(Math.abs(elbow.handle.dot(elbow.forward) - elbow.joint.dot(elbow.forward)) < 1e-6, "Auto: at the joint's depth");
+        const at = toClient(controller.worldToOverlay(elbow.handle));
+        assert.equal(controller.hitTest(at.x, at.y)?.id, "l_elbow", `zoom ${zoom}: the drawn handle is hit`);
+        const neck = toClient(controller.worldToOverlay(handles.neck.handle));
+        assert.notEqual(controller.hitTest(neck.x, neck.y)?.id, "neck", "the Neck has no depth to drag");
+        const target = { u: controller.state.markers.l_elbow.u, v: controller.state.markers.l_elbow.v };
+        const history = viewer.history.length;
+        const down = pointer("pointerdown", at.x, at.y);
+        assert.equal(down.stopped, true);
+        assert.equal(controller.drag.mode, "ray");
+        let previousAmount = controller.startingDepthAmount("l_elbow");
+        let previousTilt = controller.measuredDepthAmount("l_elbow");
+        for (let step = 1; step <= 4; step++) {
+            // Toward the capture camera along the ray.
+            const point = elbow.ray.origin.clone().addScaledVector(elbow.ray.direction, elbow.t - 0.35 * step);
+            const client = toClient(controller.worldToOverlay(point));
+            pointer("pointermove", client.x, client.y);
+            assert.ok(runFrames() >= 1, `zoom ${zoom} step ${step}: a solve frame is scheduled`);
+            const amount = controller.state.markers.l_elbow.depthAmount;
+            const tilt = controller.measuredDepthAmount("l_elbow");
+            assert.ok(amount < previousAmount - 1e-3, `zoom ${zoom} step ${step}: the amount follows the pointer (${previousAmount} -> ${amount})`);
+            assert.ok(tilt < previousTilt - 1e-4, `zoom ${zoom} step ${step}: the elbow turns toward the camera before release (${previousTilt} -> ${tilt})`);
+            assert.deepEqual({ u: controller.state.markers.l_elbow.u, v: controller.state.markers.l_elbow.v }, target, "the 2D target never moves");
+            previousAmount = amount;
+            previousTilt = tilt;
+        }
+        pointer("pointerup", 0, 0);
+        assert.equal(viewer.history.length, history + 1, "one undo step");
+        assert.match(controller.message, /L Elbow: Depth -\d+% \(toward the camera\)/);
+        // Locked handles cannot be grabbed; hidden ones are not drawn.
+        controller.elements.listRows.get("l_elbow").lock.emit("click");
+        const locked = toClient(controller.worldToOverlay(controller.depthHandles().l_elbow.handle));
+        assert.notEqual(controller.hitTest(locked.x, locked.y)?.id, "l_elbow");
+        controller.elements.listRows.get("l_elbow").eye.emit("click");
+        assert.equal(controller.depthHandles().l_elbow, undefined);
+    }
+});
+
+test("capture view: Alt + vertical drag and the wheel over the selected marker change the Depth amount; the wheel elsewhere still zooms", () => {
+    for (const zoom of [0.6, 1, 1.4]) {
+        const s = fittingScene();
+        const { controller, viewer, pointer, runFrames, container, flushTimers } = s;
+        const left = 12, top = 34;
+        viewer.canvas.getBoundingClientRect = () => ({ left, top, width: VIEW * zoom, height: VIEW * zoom });
+        controller.setActive(true);
+        const marker = controller.state.markers.l_elbow;
+        const target = { u: marker.u, v: marker.v };
+        const layout = controller.frameToOverlay(marker.u, marker.v);
+        const at = { x: left + layout.x * zoom, y: top + layout.y * zoom };
+        const start = controller.startingDepthAmount("l_elbow");
+        let history = viewer.history.length;
+        pointer("pointerdown", at.x, at.y, { altKey: true });
+        assert.equal(controller.drag.mode, "alt");
+        // 20 layout px up (scaled by the canvas zoom on screen) = 20% toward the camera.
+        pointer("pointermove", at.x, at.y - 10 * zoom);
+        runFrames();
+        const mid = controller.measuredDepthAmount("l_elbow");
+        pointer("pointermove", at.x, at.y - 20 * zoom);
+        runFrames();
+        assert.ok(Math.abs(marker.depthAmount - (start - 0.2)) < 1e-9, `zoom ${zoom}: ${marker.depthAmount} vs ${start - 0.2}`);
+        assert.ok(controller.measuredDepthAmount("l_elbow") < mid, "the pose follows before release");
+        pointer("pointerup", at.x, at.y - 20 * zoom);
+        assert.equal(viewer.history.length, history + 1);
+        assert.deepEqual({ u: marker.u, v: marker.v }, target, "Alt + drag keeps the 2D target");
+        // Wheel over the selected marker: 5% per notch, one undo step per burst.
+        history = viewer.history.length;
+        const wheel = (x, y, deltaY) => {
+            const event = { type: "wheel", clientX: x, clientY: y, deltaY, stopped: false, prevented: false };
+            event.stopPropagation = () => { event.stopped = true; };
+            event.preventDefault = () => { event.prevented = true; };
+            container.dispatchEvent(event);
+            return event;
+        };
+        const now = controller.frameToOverlay(marker.u, marker.v);
+        const over = { x: left + now.x * zoom, y: top + now.y * zoom };
+        const before = marker.depthAmount;
+        for (let notch = 0; notch < 3; notch++) {
+            const event = wheel(over.x, over.y, -100);
+            assert.equal(event.stopped && event.prevented, true, "the viewer does not zoom over the selected marker");
+            runFrames();
+        }
+        assert.ok(Math.abs(marker.depthAmount - (before - 0.15)) < 1e-9, `zoom ${zoom}: three notches up = -15%`);
+        flushTimers();
+        assert.equal(viewer.history.length, history + 1, "one undo step for the wheel burst");
+        assert.equal(controller.live, null);
+        const away = wheel(left + 3, top + 3, -100);
+        assert.equal(away.stopped, false, "away from the marker the wheel zooms the viewer");
+        const other = controller.frameToOverlay(controller.state.markers.r_knee.u, controller.state.markers.r_knee.v);
+        assert.equal(wheel(left + other.x * zoom, top + other.y * zoom, -100).stopped, false, "only the selected marker takes the wheel");
+    }
 });

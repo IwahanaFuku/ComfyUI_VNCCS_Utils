@@ -17,7 +17,7 @@ import {
 import { HAND_PRESETS } from "./pose_studio/hand_presets.js";
 import { importMixamoFBXAnimation } from "./pose_studio/imports/mixamo.js?v=1791754604000";
 import { detectAndParseJSON, convertOpenPoseToPose, roundTripTest } from "./pose_studio/imports/openpose.js?v=1791754604000";
-import { PoseFitting2DController } from "./pose_studio/pose_fitting2d_ui.mjs?v=20261102.6";
+import { PoseFitting2DController } from "./pose_studio/pose_fitting2d_ui.mjs?v=20261102.7";
 import { installCustomSelects } from "./shared/custom_select.mjs";
 import {
     DEFAULT_CHARACTER_COLORS,
@@ -1449,6 +1449,32 @@ const STYLES = `
     margin-top: 8px;
     padding-top: 6px;
     border-top: 1px solid var(--ps-border, #333);
+}
+
+/* Depth amount: exact percent next to the slider; Auto dims the slider (it shows the current tilt). */
+.vnccs-ps-fit-row > .vnccs-ps-fit-number {
+    flex: 0 0 4.2em;
+    width: 4.2em;
+    padding: 3px 4px;
+}
+
+.vnccs-ps-fit-row > .vnccs-ps-slider.auto {
+    opacity: 0.45;
+}
+
+.vnccs-ps-fit-note {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-size: 10px;
+    color: var(--ps-text-muted, #aaa);
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.vnccs-ps-fit-note + .vnccs-ps-btn {
+    flex: 0 0 auto;
+    padding: 5px 8px;
 }
 
 /* === Action Bar === */

@@ -8,13 +8,17 @@
  * Coordinate spaces:
  * - Markers are stored in normalized output-frame coordinates (u, v; top-left
  *   origin) of the CAPTURE camera, never of the editor camera.
- * - For display, a frame point is placed on the plane of the orange capture
- *   frame (through the capture camera's projection) and that 3D point is then
- *   projected with the editor camera, so markers stay glued to the frame while
- *   the editor view orbits.
+ * - For display in the capture-camera view, a frame point is placed on the
+ *   plane of the orange capture frame (through the capture camera's
+ *   projection) and that 3D point is then projected with the editor camera.
+ * - In an orbited editor view (looking from another direction than the capture
+ *   camera), every marker is a point on its capture-camera ray: the ray is
+ *   drawn as a thin line and the marker sits at its 3D target depth on it.
+ *   Dragging it there only slides it along the ray (Depth amount); the 2D
+ *   target never changes.
  */
 import { detectAndParseJSON } from "./imports/openpose.js?v=1791754604000";
-import * as F from "./pose_fitting2d.mjs?v=20261102.5";
+import * as F from "./pose_fitting2d.mjs?v=20261102.7";
 
 const SIDE_COLORS = { l: "#4fd1ff", r: "#ff9f43", c: "#ffe066" };
 const SKELETON = [
@@ -45,12 +49,25 @@ const EYE_ICONS = {
     on: svgIcon('<path d="M1 8s2.6-4.6 7-4.6S15 8 15 8s-2.6 4.6-7 4.6S1 8 1 8z" fill="none" stroke="currentColor" stroke-width="1.4"/><circle cx="8" cy="8" r="2.1" fill="currentColor"/>'),
     off: svgIcon('<path d="M1 8s2.6-4.6 7-4.6S15 8 15 8s-2.6 4.6-7 4.6S1 8 1 8z" fill="none" stroke="currentColor" stroke-width="1.2" opacity="0.6"/><path d="M2.5 13.5l11-11" stroke="currentColor" stroke-width="1.6"/>'),
 };
+/** Above this angle between the editor and capture camera directions the view counts as orbited. */
+export const POSE_FITTING_ORBIT_VIEW_DEG = 4;
+/** Capture view: Alt + vertical drag changes the Depth amount by 1% per layout pixel (up = toward the camera). */
+export const POSE_FITTING_ALT_DEPTH_PER_PX = 0.01;
+/** Mouse wheel over the selected marker: 5% per notch (wheel up = toward the camera). */
+export const POSE_FITTING_WHEEL_DEPTH_STEP = 0.05;
+/** Wheel notches closer together than this form one undo step. */
+const WHEEL_GESTURE_MS = 350;
 export const POSE_FITTING_FRAME_BUDGET = Object.freeze({ iterations: 8, timeMs: 6 });
 export const POSE_FITTING_FINAL_BUDGET = Object.freeze({ iterations: 80, timeMs: 80 });
 const MARKER_DEFS = new Map(F.POSE_FITTING_MARKERS.map(def => [def.id, def]));
-const FLIP_TITLE = "Mirror this segment's depth across the camera ray (keeps the 2D position), then refit. L/R Hand: the other wrist direction on the same ray";
+const FLIP_TITLE = "Mirror this segment's depth across the camera ray (keeps the 2D position) and set the mirrored Depth amount, then refit. L/R Hand: the other wrist direction on the same ray";
+const DEPTH_TITLE = "Depth amount: the segment's tilt from its parent joint, -100% straight toward the camera, +100% straight away (the forward offset divided by the segment length). Auto (empty) sets no depth constraint. In the capture view Alt + drag up/down or the wheel over the selected marker changes it; in an orbited view drag the marker along its ray.";
+const formatDepth = value => (value === null || value === undefined || !Number.isFinite(value) ? "-" : `${value > 0 ? "+" : ""}${Math.round(value * 100)}%`);
+const clampAmount = value => Math.max(-1, Math.min(1, value));
 
 const now = () => (typeof performance !== "undefined" && performance?.now ? performance.now() : Date.now());
+
+const document_activeElement = doc => doc?.activeElement || null;
 
 export class PoseFitting2DController {
     constructor(host, env = {}) {
@@ -58,6 +75,10 @@ export class PoseFitting2DController {
         this.document = env.document || globalThis.document;
         this.requestFrame = env.requestAnimationFrame || (callback => globalThis.requestAnimationFrame(callback));
         this.cancelFrame = env.cancelAnimationFrame || (id => globalThis.cancelAnimationFrame(id));
+        this.setTimer = env.setTimeout || ((callback, ms) => globalThis.setTimeout(callback, ms));
+        this.clearTimer = env.clearTimeout || (id => globalThis.clearTimeout(id));
+        /** Wheel depth gesture: { id, amount, timer } while notches keep coming. */
+        this.wheel = null;
         this.active = false;
         this.selectedId = null;
         /** Collapsed marker-tree nodes (panel view state, not saved). */
@@ -171,15 +192,19 @@ export class PoseFitting2DController {
         return F.fittingStateToSolverMarkers(this.state, this.frameSize(), { dragging: this.drag?.moved ? this.drag.id : null });
     }
 
-    /** Start an incremental solve context (drag or live constraint edit). */
-    createContext() {
+    /**
+     * Start an incremental solve context (drag or live constraint edit).
+     * `keepDepth` turns on the keep-camera-depth prior for the gesture, with
+     * the `free` markers (the one being moved) left out of it.
+     */
+    createContext({ keepDepth = false, free = [] } = {}) {
         const model = this.buildModel();
         const projector = this.projector();
         if (!model || !projector) return null;
         const anchor = F.captureFittingState(model);
         // Figure size in the frame, fixed for the whole gesture.
         const priorScale = F.projectionPriorScale(model, projector, anchor);
-        return { model, projector, anchor, state: anchor, priorScale };
+        return { model, projector, anchor, state: anchor, priorScale, keepDepth: keepDepth === true, depthFree: free.filter(Boolean) };
     }
 
     runSolve(context, budget) {
@@ -191,6 +216,7 @@ export class PoseFitting2DController {
             maxIterations: budget.iterations,
             timeBudgetMs: budget.timeMs,
             tolerance: 1e-7,
+            ...(context.keepDepth ? { keepDepth: true, depthFree: context.depthFree } : {}),
         }, context));
         this.recordTiming(now() - started);
         // Reject broken results and keep the last valid pose visible. A pose that
@@ -460,19 +486,54 @@ export class PoseFitting2DController {
         }
         this.beginUndoStep();
         F.applyFittingStateToViewer(this.viewer, model, flipped);
-        marker.depth = F.markerDepthRelation(model, projector, id, flipped);
+        // The mirrored tilt becomes an explicit Depth amount, so the refit (and
+        // every later solve) keeps the new side and depth.
+        marker.depthAmount = F.markerDepthAmount(model, projector, id, flipped);
+        marker.depth = "auto";
         const context = this.createContext();
         // A hand Flip turns only the wrist: the refit leaves the finger chains alone.
         if (context && MARKER_DEFS.get(id)?.handPoint) context.exclude = new Set(F.POSE_FITTING_MARKERS.filter(def => def.group === "hand").map(def => def.id));
         if (context) this.runSolve(context, POSE_FITTING_FINAL_BUDGET);
-        this.message = `${MARKER_DEFS.get(id)?.label || id}: depth flipped (${marker.depth === "near" ? "toward" : "away from"} camera).`;
+        this.message = `${MARKER_DEFS.get(id)?.label || id}: depth flipped to ${formatDepth(marker.depthAmount)} (${marker.depthAmount < 0 ? "toward" : "away from"} camera).`;
         this.commitPose();
     }
 
-    /** Weight slider: live refit while dragging, one undo step per gesture. */
-    beginLiveEdit() {
+    /** Weight / Depth slider and wheel: live refit while dragging, one undo step per gesture. */
+    beginLiveEdit(id = this.selectedId) {
         if (this.live || !this.isAvailable()) return;
-        this.live = this.createContext();
+        this.live = this.createContext({ keepDepth: true, free: [id] });
+    }
+
+    /** Current Depth amount of a marker's joint (-1..1), or null without a parent. */
+    measuredDepthAmount(id, context = null) {
+        if (!MARKER_DEFS.get(id)?.parent || !this.isAvailable()) return null;
+        const model = context?.model || this.buildModel();
+        const projector = context?.projector || this.projector();
+        return model && projector ? F.markerDepthAmount(model, projector, id, context?.state || null) : null;
+    }
+
+    /** The amount a depth gesture starts from: the set amount, or the current tilt for Auto. */
+    startingDepthAmount(id) {
+        const marker = this.state?.markers?.[id];
+        if (!marker) return 0;
+        return Number.isFinite(marker.depthAmount) ? marker.depthAmount : (this.measuredDepthAmount(id) ?? 0);
+    }
+
+    /** Depth amount edit inside a live gesture (slider, wheel): realtime refit, undo at gesture start. */
+    liveDepth(id, amount) {
+        this.liveEdit(id, { depthAmount: clampAmount(amount), depth: "auto", enabled: true });
+    }
+
+    /** ↺ on Depth: back to Auto (no depth constraint). One undo step; nothing pulls, so no refit. */
+    setDepthAuto(id) {
+        const marker = this.state?.markers?.[id];
+        if (!marker || (marker.depthAmount === null && marker.depth === "auto")) return;
+        this.endInteraction();
+        this.beginUndoStep();
+        marker.depthAmount = null;
+        marker.depth = "auto";
+        this.message = `${MARKER_DEFS.get(id)?.label || id}: Depth back to Auto.`;
+        this.commitPose();
     }
 
     liveEdit(id, patch) {
@@ -549,6 +610,10 @@ export class PoseFitting2DController {
 
     endInteraction() {
         this.cancelSolveFrame();
+        if (this.wheel) {
+            if (this.wheel.timer !== null) this.clearTimer(this.wheel.timer);
+            this.wheel = null;
+        }
         if (this.drag?.pointerId !== undefined) this.container?.releasePointerCapture?.(this.drag.pointerId);
         this.drag = null;
         this.live = null;
@@ -622,14 +687,137 @@ export class PoseFitting2DController {
 
     /** Overlay (CSS px) position of a frame point as seen through the editor camera. */
     frameToOverlay(u, v, framePlane) {
+        return this.worldToOverlay(this.frameToWorld(u, v, framePlane));
+    }
+
+    /** Overlay (CSS px) position of a world point as seen through the editor camera. */
+    worldToOverlay(world) {
         const camera = this.viewer?.camera;
-        const world = this.frameToWorld(u, v, framePlane);
         if (!camera || !world) return null;
         camera.updateMatrixWorld(true);
-        const ndc = world.project(camera);
+        const ndc = world.clone().project(camera);
         if (!Number.isFinite(ndc.x) || !Number.isFinite(ndc.y) || ndc.z < -1 || ndc.z > 1) return null;
         const size = this.viewportSize();
         return { x: (ndc.x + 1) / 2 * size.width, y: (1 - ndc.y) / 2 * size.height };
+    }
+
+    /** True when the editor camera looks from another direction than the capture camera. */
+    isOrbitedView() {
+        const viewer = this.viewer;
+        const THREE = viewer?.THREE;
+        if (!THREE || !viewer.camera || !viewer.captureCamera) return false;
+        viewer.camera.updateMatrixWorld(true);
+        viewer.captureCamera.updateMatrixWorld(true);
+        const editor = viewer.camera.getWorldDirection(new THREE.Vector3());
+        const capture = viewer.captureCamera.getWorldDirection(new THREE.Vector3());
+        return editor.angleTo(capture) > POSE_FITTING_ORBIT_VIEW_DEG * Math.PI / 180;
+    }
+
+    /** World ray of the capture camera through a frame point. */
+    captureRay(u, v) {
+        const THREE = this.viewer?.THREE;
+        const camera = this.viewer?.captureCamera;
+        if (!THREE || !camera) return null;
+        camera.updateMatrixWorld(true);
+        const nx = u * 2 - 1, ny = 1 - v * 2;
+        const near = new THREE.Vector3(nx, ny, -1).unproject(camera);
+        const far = new THREE.Vector3(nx, ny, 1).unproject(camera);
+        return { origin: near, direction: far.sub(near).normalize() };
+    }
+
+    /**
+     * 3D depth handles: for every shown marker, its capture ray and the point
+     * on it at the marker's target depth. With a Depth amount the target depth
+     * is the parent joint's depth + amount * segment length; otherwise (Auto,
+     * sign-only Near/Far, or no parent) it is the joint's current depth.
+     */
+    depthHandles(model = this.buildModel(), projector = this.projector(), state = null) {
+        const THREE = this.viewer?.THREE;
+        const camera = this.viewer?.captureCamera;
+        const markers = this.state?.markers;
+        if (!THREE || !camera || !model || !projector || !markers) return {};
+        const forward = camera.getWorldDirection(new THREE.Vector3());
+        const joints = F.projectFittingJoints(model, projector, state);
+        const out = {};
+        for (const id of this.visibleIds()) {
+            const marker = markers[id];
+            const joint = joints[id];
+            if (!marker || marker.u === null || marker.hidden || !joint) continue;
+            const def = MARKER_DEFS.get(id);
+            const world = new THREE.Vector3(...joint.world);
+            const parentJoint = def.parent ? joints[def.parent] : null;
+            const parent = parentJoint ? new THREE.Vector3(...parentJoint.world) : null;
+            const length = parent ? world.distanceTo(parent) : 0;
+            const depth = parent && Number.isFinite(marker.depthAmount) && length > 1e-9
+                ? parent.dot(forward) + marker.depthAmount * length
+                : world.dot(forward);
+            const ray = this.captureRay(marker.u, marker.v);
+            const along = ray ? ray.direction.dot(forward) : 0;
+            if (!ray || !(along > 1e-6)) continue;
+            const t = (depth - ray.origin.dot(forward)) / along;
+            out[id] = { ray, t, handle: ray.origin.clone().addScaledVector(ray.direction, t), joint: world, parent, length, forward };
+        }
+        return out;
+    }
+
+    /** Parameter along a world ray of the point closest to the pointer's view ray. */
+    pointerRayParam(ray, clientX, clientY) {
+        const viewer = this.viewer;
+        const THREE = viewer?.THREE;
+        if (!THREE || !viewer.camera || !this.canvas || !ray) return null;
+        const rect = this.canvas.getBoundingClientRect();
+        const pointer = new THREE.Vector2(
+            ((clientX - rect.left) / Math.max(1, rect.width)) * 2 - 1,
+            -((clientY - rect.top) / Math.max(1, rect.height)) * 2 + 1,
+        );
+        viewer.camera.updateMatrixWorld(true);
+        const raycaster = new THREE.Raycaster();
+        raycaster.setFromCamera(pointer, viewer.camera);
+        const view = raycaster.ray;
+        const b = ray.direction.dot(view.direction);
+        const denominator = 1 - b * b;
+        if (denominator < 1e-9) return null;
+        const w0 = ray.origin.clone().sub(view.origin);
+        const d = ray.direction.dot(w0), e = view.direction.dot(w0);
+        return (b * e - d) / denominator;
+    }
+
+    /**
+     * Overlay positions of the drawn, grabbable-or-not markers in the current
+     * view: on the capture frame plane in the capture view, on their depth
+     * handles in an orbited view (where markers without a parent are drawn
+     * but have no depth to drag).
+     */
+    markerOverlayPositions(orbited = this.isOrbitedView()) {
+        const out = new Map();
+        const markers = this.state?.markers;
+        if (!markers) return out;
+        if (orbited) {
+            for (const [id, item] of Object.entries(this.depthHandles())) {
+                const position = this.worldToOverlay(item.handle);
+                if (position) out.set(id, position);
+            }
+            return out;
+        }
+        const framePlane = this.framePlane();
+        for (const id of this.visibleIds()) {
+            const marker = markers[id];
+            if (!marker || marker.u === null || marker.hidden) continue;
+            const position = this.frameToOverlay(marker.u, marker.v, framePlane);
+            if (position) out.set(id, position);
+        }
+        return out;
+    }
+
+    /** Pointer position in overlay (CSS layout) px; the client rect is scaled by the ComfyUI canvas zoom. */
+    pointerToOverlay(clientX, clientY) {
+        const rect = this.canvas.getBoundingClientRect();
+        const size = this.viewportSize();
+        return {
+            x: (clientX - rect.left) * size.width / Math.max(1, rect.width),
+            y: (clientY - rect.top) * size.height / Math.max(1, rect.height),
+            scaleY: size.height / Math.max(1, rect.height),
+        };
     }
 
     pointerToFrame(clientX, clientY, framePlane = this.framePlane()) {
@@ -648,20 +836,20 @@ export class PoseFitting2DController {
         return hit ? this.worldToFrame(hit) : null;
     }
 
-    hitTest(clientX, clientY) {
+    hitTest(clientX, clientY, { orbited = this.isOrbitedView(), only = null } = {}) {
         if (!this.state || !this.canvas) return null;
         // Overlay positions are in CSS layout px; the client rect is scaled by the ComfyUI canvas zoom.
-        const rect = this.canvas.getBoundingClientRect();
-        const size = this.viewportSize();
-        const x = (clientX - rect.left) * size.width / Math.max(1, rect.width);
-        const y = (clientY - rect.top) * size.height / Math.max(1, rect.height);
-        const framePlane = this.framePlane();
+        const { x, y } = this.pointerToOverlay(clientX, clientY);
+        const positions = this.markerOverlayPositions(orbited);
         let tip = null, body = null;
         for (const id of this.visibleIds()) {
             const marker = this.state.markers[id];
             // Locked and hidden markers are skipped, so an overlapping one below can be grabbed.
             if (!marker || marker.u === null || marker.locked || marker.hidden) continue;
-            const position = this.frameToOverlay(marker.u, marker.v, framePlane);
+            if (only && id !== only) continue;
+            // Orbited view: only depth handles are grabbable (Neck and hips have no relative depth).
+            if (orbited && !MARKER_DEFS.get(id).parent) continue;
+            const position = positions.get(id);
             if (!position) continue;
             const distance = Math.hypot(position.x - x, position.y - y);
             if (MARKER_DEFS.get(id).group === "hand") {
@@ -688,6 +876,7 @@ export class PoseFitting2DController {
         overlay.className = "vnccs-ps-fit-overlay";
         container.appendChild(overlay);
         this.overlay = overlay;
+        const wheel = event => this.onWheel(event);
         const listen = (type, handler) => {
             container.addEventListener(type, handler, { capture: true });
             this._removeListeners.push(() => container.removeEventListener(type, handler, { capture: true }));
@@ -697,28 +886,49 @@ export class PoseFitting2DController {
         listen("pointerup", event => this.onPointerUp(event));
         listen("pointercancel", event => this.onPointerUp(event, true));
         listen("lostpointercapture", event => this.onPointerUp(event, true));
+        // Capture phase on the container runs before the viewer's own wheel zoom on the canvas.
+        container.addEventListener("wheel", wheel, { capture: true, passive: false });
+        this._removeListeners.push(() => container.removeEventListener("wheel", wheel, { capture: true }));
     }
 
     onPointerDown(event) {
         if (!this.active || event.button !== 0 || !this.isAvailable() || !this.settings().showMarkers) return;
-        const hit = this.hitTest(event.clientX, event.clientY);
+        const orbited = this.isOrbitedView();
+        const hit = this.hitTest(event.clientX, event.clientY, { orbited });
         if (!hit) return;
         event.stopPropagation();
         event.preventDefault?.();
         this.endInteraction();
         const marker = this.state.markers[hit.id];
-        const framePlane = this.framePlane();
-        const start = this.pointerToFrame(event.clientX, event.clientY, framePlane);
-        this.drag = {
+        const def = MARKER_DEFS.get(hit.id);
+        const drag = {
             id: hit.id,
             pointerId: event.pointerId,
             startX: event.clientX,
             startY: event.clientY,
-            offset: start ? { u: marker.u - start.u, v: marker.v - start.v } : { u: 0, v: 0 },
-            framePlane,
+            mode: "move",
             moved: false,
             context: null,
         };
+        if (def.parent && (orbited || event.altKey === true)) {
+            // Depth gestures: slide along the capture ray (orbited view) or Alt + vertical drag.
+            drag.startAmount = this.startingDepthAmount(hit.id);
+            if (orbited) {
+                const handle = this.depthHandles()[hit.id];
+                const t = handle ? this.pointerRayParam(handle.ray, event.clientX, event.clientY) : null;
+                drag.mode = "ray";
+                drag.ray = handle?.ray || null;
+                drag.tOffset = handle && t !== null ? handle.t - t : 0;
+            } else {
+                drag.mode = "alt";
+            }
+        } else {
+            const framePlane = this.framePlane();
+            const start = this.pointerToFrame(event.clientX, event.clientY, framePlane);
+            drag.framePlane = framePlane;
+            drag.offset = start ? { u: marker.u - start.u, v: marker.v - start.v } : { u: 0, v: 0 };
+        }
+        this.drag = drag;
         this.container?.setPointerCapture?.(event.pointerId);
         this.select(hit.id);
     }
@@ -730,10 +940,21 @@ export class PoseFitting2DController {
         event.preventDefault?.();
         if (!drag.moved) {
             if (Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) < 2) return;
-            drag.context = this.createContext();
+            // The dragged marker is free; the other joints keep their camera depth.
+            drag.context = this.createContext({ keepDepth: true, free: [drag.id] });
             if (!drag.context) return;
             this.beginUndoStep();
             drag.moved = true;
+        }
+        if (drag.mode !== "move") {
+            const amount = this.depthFromPointer(drag, event.clientX, event.clientY);
+            const marker = this.state?.markers?.[drag.id];
+            if (amount === null || !marker) return;
+            Object.assign(marker, { depthAmount: clampAmount(amount), depth: "auto", enabled: true });
+            this.requestSolveFrame();
+            this.redraw();
+            this.refreshPanel();
+            return;
         }
         const point = this.pointerToFrame(event.clientX, event.clientY, drag.framePlane);
         if (!point) return;
@@ -747,6 +968,57 @@ export class PoseFitting2DController {
         this.redraw();
     }
 
+    /**
+     * Depth amount for a depth drag: Alt + vertical drag (up = toward the
+     * camera), or the point on the capture ray nearest the pointer, measured
+     * from the parent joint where it was when the gesture started (so every
+     * pointer step changes the amount, even while the solve moves the parent).
+     */
+    depthFromPointer(drag, clientX, clientY) {
+        if (drag.mode === "alt") {
+            const { scaleY } = this.pointerToOverlay(clientX, clientY);
+            return drag.startAmount + (clientY - drag.startY) * scaleY * POSE_FITTING_ALT_DEPTH_PER_PX;
+        }
+        const t = this.pointerRayParam(drag.ray, clientX, clientY);
+        const context = drag.context;
+        if (t === null || !context) return null;
+        const handle = this.depthHandles(context.model, context.projector, context.anchor)[drag.id];
+        if (!handle?.parent || !(handle.length > 1e-9)) return null;
+        const point = drag.ray.origin.clone().addScaledVector(drag.ray.direction, t + drag.tOffset);
+        return (point.dot(handle.forward) - handle.parent.dot(handle.forward)) / handle.length;
+    }
+
+    /** Mouse wheel over the selected marker: Depth amount in 5% notches; anywhere else the viewer zooms. */
+    onWheel(event) {
+        if (!this.active || !this.isAvailable() || !this.settings().showMarkers || !this.canvas) return;
+        const id = this.selectedId;
+        const marker = this.state?.markers?.[id];
+        if (!marker || !MARKER_DEFS.get(id)?.parent || marker.u === null || marker.locked || marker.hidden) return;
+        if (!this.hitTest(event.clientX, event.clientY, { only: id })) return;
+        event.preventDefault?.();
+        event.stopPropagation?.();
+        const delta = Number(event.deltaY) || 0;
+        if (!delta) return;
+        if (!this.wheel || this.wheel.id !== id) {
+            this.endInteraction();
+            this.beginUndoStep();
+            this.beginLiveEdit(id);
+            this.wheel = { id, amount: this.startingDepthAmount(id), timer: null };
+        } else if (this.wheel.timer !== null) {
+            this.clearTimer(this.wheel.timer);
+        }
+        this.wheel.amount = clampAmount(this.wheel.amount + Math.sign(delta) * POSE_FITTING_WHEEL_DEPTH_STEP * Math.min(1, Math.abs(delta) / 100));
+        this.liveDepth(id, this.wheel.amount);
+        this.message = `${MARKER_DEFS.get(id).label}: Depth ${formatDepth(this.wheel.amount)}.`;
+        this.wheel.timer = this.setTimer(() => this.finishWheel(), WHEEL_GESTURE_MS);
+    }
+
+    finishWheel() {
+        if (!this.wheel) return;
+        this.wheel = null;
+        this.endLiveEdit();
+    }
+
     onPointerUp(event, cancelled = false) {
         const drag = this.drag;
         if (!drag || (event.pointerId !== undefined && event.pointerId !== drag.pointerId)) return;
@@ -758,7 +1030,10 @@ export class PoseFitting2DController {
         // The final pass converges from the last visible pose; no jump on release.
         this.runSolve(drag.context, POSE_FITTING_FINAL_BUDGET);
         if (cancelled) this.message = "Drag ended by the browser; the last pose was kept.";
-        else if (/_hip$/.test(drag.id)) {
+        else if (drag.mode !== "move") {
+            const amount = this.state?.markers?.[drag.id]?.depthAmount;
+            this.message = `${MARKER_DEFS.get(drag.id)?.label || drag.id}: Depth ${formatDepth(amount)} (${amount < 0 ? "toward" : "away from"} the camera).`;
+        } else if (/_hip$/.test(drag.id)) {
             // One hip can only turn the rigid pelvis; sliding it needs the root.
             const settings = this.settings();
             const error = this.lastResult?.markers?.find(item => item.id === drag.id)?.error;
@@ -796,11 +1071,31 @@ export class PoseFitting2DController {
         if (!model || !projector || !framePlane) return;
         const projected = F.projectFittingJoints(model, projector);
         const visible = this.visibleIds();
+        const orbited = this.isOrbitedView();
+        const handles = orbited ? this.depthHandles(model, projector) : null;
         const targets = {};
         for (const id of visible) {
             const marker = state.markers[id];
             if (marker?.u === null || marker?.u === undefined || marker.hidden) continue;
-            targets[id] = this.frameToOverlay(marker.u, marker.v, framePlane);
+            targets[id] = orbited
+                ? (handles[id] ? this.worldToOverlay(handles[id].handle) : null)
+                : this.frameToOverlay(marker.u, marker.v, framePlane);
+        }
+        if (orbited) {
+            // Each marker's capture-camera ray, a segment around its handle.
+            ctx.lineWidth = 1;
+            for (const [id, item] of Object.entries(handles)) {
+                const def = MARKER_DEFS.get(id);
+                const span = Math.max(item.length || 0, 0.5) * 1.5;
+                const a = this.worldToOverlay(item.ray.origin.clone().addScaledVector(item.ray.direction, Math.max(item.t - span, 1e-3)));
+                const b = this.worldToOverlay(item.ray.origin.clone().addScaledVector(item.ray.direction, item.t + span));
+                if (!a || !b) continue;
+                ctx.strokeStyle = state.markers[id].locked ? `${LOCKED_COLOR}66` : `${SIDE_COLORS[def.side] || "#ffffff"}66`;
+                ctx.beginPath();
+                ctx.moveTo(a.x, a.y);
+                ctx.lineTo(b.x, b.y);
+                ctx.stroke();
+            }
         }
         ctx.lineWidth = 1;
         ctx.strokeStyle = "rgba(255,255,255,0.28)";
@@ -819,7 +1114,10 @@ export class PoseFitting2DController {
             const hand = def.group === "hand";
             const handPoint = def.handPoint === true;
             const joint = projected[id];
-            const actual = joint?.valid ? this.frameToOverlay(joint.x / frame.width, joint.y / frame.height, framePlane) : null;
+            // Orbited view: the joint where it really is in 3D; capture view: its projection on the frame.
+            const actual = !joint?.valid ? null : orbited
+                ? this.worldToOverlay(new this.viewer.THREE.Vector3(...joint.world))
+                : this.frameToOverlay(joint.x / frame.width, joint.y / frame.height, framePlane);
             const error = joint?.valid ? Math.hypot(joint.x - marker.u * frame.width, joint.y - marker.v * frame.height) : Infinity;
             const color = marker.locked ? LOCKED_COLOR : (SIDE_COLORS[def.side] || "#ffffff");
             if (actual && marker.enabled) {
@@ -1004,20 +1302,59 @@ export class PoseFitting2DController {
         weight.addEventListener("pointerup", finishWeight);
         weight.addEventListener("pointercancel", finishWeight);
         weight.addEventListener("blur", finishWeight);
-        const depth = make("select", "vnccs-ps-select vnccs-ps-fit-select");
-        for (const [value, label] of [["auto", "Auto"], ["near", "Near"], ["far", "Far"]]) {
-            const option = make("option", "", label);
-            option.value = value;
-            depth.appendChild(option);
-        }
-        depth.title = "Depth / bend hint: Near = this joint is closer to the camera than its parent joint, Far = farther";
-        depth.addEventListener("change", () => this.editMarker(this.selectedId, { depth: depth.value }));
+        // Depth amount: slider + exact number + ↺ (back to Auto). Live refit while
+        // dragging; one undo step per gesture, like Weight.
+        const depth = make("input", "vnccs-ps-slider");
+        depth.type = "range"; depth.min = "-100"; depth.max = "100"; depth.step = "1"; depth.value = "0";
+        depth.title = DEPTH_TITLE;
+        const depthInput = make("input", "vnccs-ps-input vnccs-ps-fit-number");
+        depthInput.type = "number"; depthInput.min = "-100"; depthInput.max = "100"; depthInput.step = "1";
+        depthInput.placeholder = "Auto";
+        depthInput.title = "Depth amount in percent (-100 toward the camera .. +100 away); empty = Auto";
+        let depthGesture = false;
+        const beginDepth = () => {
+            if (depthGesture || !this.selectedId) return;
+            depthGesture = true;
+            this.endInteraction();
+            this.beginUndoStep();
+            this.beginLiveEdit(this.selectedId);
+        };
+        const finishDepth = () => {
+            if (!depthGesture) return;
+            depthGesture = false;
+            this.endLiveEdit();
+        };
+        depth.addEventListener("pointerdown", beginDepth);
+        depth.addEventListener("input", () => {
+            if (!this.selectedId) return;
+            beginDepth();
+            const value = Math.max(-100, Math.min(100, Number(depth.value)));
+            if (document_activeElement(this.document) !== depthInput) depthInput.value = String(value);
+            this.liveDepth(this.selectedId, value / 100);
+        });
+        for (const type of ["change", "pointerup", "pointercancel", "blur"]) depth.addEventListener(type, finishDepth);
+        depthInput.addEventListener("input", () => {
+            if (depthInput.value === "" || !Number.isFinite(Number(depthInput.value))) return;
+            depth.value = String(Math.max(-100, Math.min(100, Number(depthInput.value))));
+            depth.dispatchEvent(new Event("input"));
+        });
+        depthInput.addEventListener("change", () => {
+            if (depthInput.value === "") { finishDepth(); this.setDepthAuto(this.selectedId); return; }
+            depth.dispatchEvent(new Event("change"));
+        });
+        const depthReset = make("button", "vnccs-ps-reset-btn");
+        depthReset.type = "button";
+        depthReset.innerHTML = "↺";
+        depthReset.title = "Back to Auto (no depth constraint)";
+        depthReset.addEventListener("click", event => { event?.stopPropagation?.(); this.setDepthAuto(this.selectedId); });
+        const depthNote = make("span", "vnccs-ps-fit-note", "");
         const flip = button("Flip", FLIP_TITLE, () => this.flipDepth(this.selectedId));
         editor.appendChild(row(editorTitle));
         editor.appendChild(row(enabled.wrap, pinned.wrap));
         const weightReset = resetButton(weight, 1, "Reset to 1.0");
         editor.appendChild(row(make("span", "vnccs-ps-label", "Weight"), weight, weightLabel, weightReset));
-        editor.appendChild(row(make("span", "vnccs-ps-label", "Depth"), depth, flip));
+        editor.appendChild(row(make("span", "vnccs-ps-label", "Depth"), depth, depthInput, depthReset));
+        editor.appendChild(row(depthNote, flip));
         content.appendChild(editor);
 
         const fileInput = make("input");
@@ -1033,7 +1370,7 @@ export class PoseFitting2DController {
         this.elements = {
             toggle, load, fit, reset, clear, scope, fingertips: fingertips.input, hideHandles: hideHandles.input, show: show.input, moveRoot: moveRoot.input, autoRefit: autoRefit.input,
             stiffness, stiffnessLabel, stiffnessReset, status, list, editor, editorTitle, enabled: enabled.input, pinned: pinned.input,
-            weight, weightLabel, weightReset, depth, flip, fileInput, listRows: new Map(),
+            weight, weightLabel, weightReset, depth, depthInput, depthReset, depthNote, flip, fileInput, listRows: new Map(),
         };
         this.refreshPanel();
     }
@@ -1158,8 +1495,20 @@ export class PoseFitting2DController {
                 e.weight.value = String(marker.weight);
                 e.weightLabel.textContent = Number(marker.weight).toFixed(1);
             }
-            e.depth.value = marker.depth;
-            e.depth.disabled = !def.parent;
+            // Depth: the set amount, or (Auto / legacy Near-Far) the current tilt, dimmed.
+            const amount = Number.isFinite(marker.depthAmount) ? marker.depthAmount : null;
+            const measured = def.parent && available ? this.measuredDepthAmount(this.selectedId, this.live || this.drag?.context || null) : null;
+            // Leave the slider alone while it is the control being dragged.
+            if (!(this.live && !this.wheel)) {
+                e.depth.value = String(Math.round((amount ?? measured ?? 0) * 100));
+                if (document_activeElement(this.document) !== e.depthInput) e.depthInput.value = amount === null ? "" : String(Math.round(amount * 100));
+            }
+            e.depth.classList?.toggle?.("auto", amount === null);
+            for (const control of [e.depth, e.depthInput, e.depthReset]) control.disabled = !def.parent;
+            e.depthNote.textContent = !def.parent ? "No parent joint: use Move root"
+                : amount !== null ? `Set ${formatDepth(amount)}${measured !== null ? ` · now ${formatDepth(measured)}` : ""}`
+                    : marker.depth === "near" || marker.depth === "far" ? `${marker.depth === "near" ? "Near" : "Far"} (side only) · now ${formatDepth(measured)}`
+                        : `Auto · now ${formatDepth(measured)}`;
             // Grey out Flip when it would be refused; keep the last answer while a drag or slider is live.
             if (!this.live && !this.drag) {
                 const reason = !def.flip || !available ? null : this.flipCheck(this.selectedId).reason;

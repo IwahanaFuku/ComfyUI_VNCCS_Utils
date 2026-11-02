@@ -343,7 +343,9 @@ that.
    hand. Body-only files load exactly as before.
 3. Drag markers in the viewport. The mannequin follows while you drag; every
    enabled marker is solved together. Clicks away from a marker still select
-   bones and orbit the editor camera.
+   bones and orbit the editor camera. Orbit the editor view to check depth:
+   there every marker sits on its camera ray, and dragging it sets how far
+   toward or away from the camera the joint is (see [Depth](#depth)).
 4. Press **Fit Pose** for a full-accuracy solve of all enabled markers.
 5. Check the residual lines in the viewport (marker to projected joint, red
    above 6 px) and the mean / max error in the panel's status line.
@@ -367,15 +369,45 @@ that.
 | Enabled | Uses this marker in the solve. |
 | Pinned | Weight x10; Reset Targets keeps the marker in place. |
 | Weight | 0..10 per marker; edits refit live. ↺ resets it to 1.0 and refits. |
-| Depth | `Auto`, `Near` or `Far`: the joint is closer to (Near) or farther from (Far) the camera than its parent joint. |
+| Depth | Depth amount, -100% .. +100%: how far the segment from the parent joint tilts toward (-) or away from (+) the camera (see [Depth](#depth)). Slider, exact percent field and ↺; empty / ↺ = `Auto`, no depth constraint. The slider refits live, one Undo step per gesture. Disabled for Neck and the hips, which have no parent joint (use Move root to move them). |
 | Marker list | An outliner tree that follows the skeleton (see below). Click a row to select the marker; the arrow collapses or expands its branch. |
 | Lock (padlock) | The marker cannot be grabbed or dragged in the viewport, and Reset Targets and Load OpenPose JSON leave its target where it is. It still constrains the solve. Locked markers are drawn red. |
 | Hide (eye) | The marker is not drawn and cannot be grabbed. Display only: it still constrains the solve (use Enabled to turn a constraint off). |
-| Flip | Mirrors the joint's depth around its parent while keeping the 2D position (for example an elbow pointing toward or away from the camera). On `L/R Hand` it takes the other wrist direction that projects to the same point (the hand bent toward instead of away from the camera, or the reverse), with the roll that needs the least side bend and twist; only the hand bone turns, fingers stay, and the Depth hint keeps the new side. Greyed out (the tooltip says why) when the mirrored pose would break the joint (wrist) limits, or when the hand points straight across the view so both directions are the same. One Undo step. |
+| Flip | Mirrors the joint's depth around its parent while keeping the 2D position (for example an elbow pointing toward or away from the camera). On `L/R Hand` it takes the other wrist direction that projects to the same point (the hand bent toward instead of away from the camera, or the reverse), with the roll that needs the least side bend and twist; only the hand bone turns and fingers stay. Flip sets the Depth amount to the mirrored tilt, which keeps the new side in later solves. Greyed out (the tooltip says why) when the mirrored pose would break the joint (wrist) limits, or when the hand points straight across the view so both directions are the same. One Undo step. |
 
 Every marker drag, Fit Pose, Reset Targets, Clear Constraints, marker edit,
-Lock or Hide toggle, Stiffness or Weight slider gesture and slider reset is one
-Undo step, and Undo restores the pose and the markers together.
+Lock or Hide toggle, Stiffness, Weight or Depth gesture (slider, depth drag or
+wheel burst) and reset is one Undo step, and Undo restores the pose and the
+markers together.
+
+### Depth
+
+A marker is a point on its camera ray: its 2D position fixes the ray, and the
+Depth amount says where on that ray the joint should be, relative to its parent
+joint (Head to Neck, Elbow to Shoulder, Wrist to Elbow, Hand to Wrist, Knee to
+Hip, Ankle to Knee, fingertips to the Wrist).
+
+| Value | Meaning |
+| --- | --- |
+| `Auto` (default) | No depth constraint. The solver keeps depth near the pose it starts from. |
+| -100% .. +100% | The camera-forward offset of the joint from its parent divided by their distance: -100% points straight at the camera, 0% lies in a plane facing the camera, +100% points straight away. |
+| `Near` / `Far` (older poses) | Only the side, as before. Kept until you set an amount. |
+
+| Where | How |
+| --- | --- |
+| Marker editor | Depth slider, the percent field, ↺ back to `Auto`. The note under it shows the set amount and the current tilt (`Auto · now -42%`). |
+| Orbited editor view | Any view that does not look along the capture camera (more than 4 degrees off). Every shown marker's camera ray is drawn as a thin line, and the marker is drawn at its 3D target depth on it (`Auto`: where the joint is now). Drag a marker along its ray: only its depth changes, the 2D target stays, and the pose refits every frame. Neck and hips are drawn but have no depth handle. |
+| Capture view | `Alt` + drag up / down on a marker: 1% per pixel, up is toward the camera. The mouse wheel over the selected marker: 5% per notch, wheel up is toward the camera; elsewhere the wheel zooms the viewer as usual. |
+| Flip | Sets the amount to the mirrored tilt. |
+
+Locked markers cannot be dragged in depth either, and hidden markers have no
+ray. The depth term counts like the 2D marker: a 10 px depth error (measured
+in pixels at the figure's scale) costs as much as being 10 px off target, and
+Weight and Pinned (x10) scale both. A rigid segment's projected length already
+fixes its tilt up to the side, so when the 2D markers are exact, an amount
+mostly picks the side; when they cannot be reached (a reference drawn larger
+or with other proportions than the mannequin), the amount holds the depth and
+the 2D residual stays visible instead of the segment turning flat.
 
 ### Marker list
 
@@ -408,9 +440,18 @@ show pixel residuals; the status line has the mean and max error.
   make the pose jump. The energy is the weighted 2D reprojection error plus a
   prior that keeps the pose close to where the drag or fit started, joint
   limits (shoulders, hips, neck and head swing/twist; elbows and knees are
-  hinges that never hyperextend), and the depth hints. The prior is scaled by
+  hinges that never hyperextend), and the depth terms. The prior is scaled by
   the figure's size in the frame, so Stiffness behaves the same for any FOV,
   Distance, zoom and output size.
+- Depth amounts are a soft term per marker: camera-forward offset from the
+  parent joint minus amount x segment length, converted to output pixels with
+  the figure's pixels per world unit, weighted like the marker. During marker
+  drags and Weight / Depth gestures, a weak keep-camera-depth prior (0.1 of
+  that scale: a 10 px depth change costs as much as ~3 px off target) holds
+  the forward offset of every joint that is not being dragged and has no
+  amount, so dragging one marker does not flatten the rest of the body. Fit
+  Pose leaves it out, so it can still change foreshortening to match new
+  targets (an OpenPose import, for example).
 - Only joint rotations change (plus the pelvis position with Move root);
   bone lengths and body proportions never change.
 - Hands are solved after the body, in two short stages that never move the
@@ -441,9 +482,9 @@ show pixel residuals; the status line has the mean and max error.
 
 ### Storage
 
-Markers, pins, weights, depth hints and the panel settings (including
+Markers, pins, weights, Depth amounts and the panel settings (including
 Fingertips) are stored on the pose as `fitting2d` (normalized `u`/`v`
-output-frame coordinates, top-left origin, version 5). Every character and
+output-frame coordinates, top-left origin, version 6). Every character and
 every pose tab has its own markers, and they are saved with the workflow and
 with Pose Library entries. Poses without `fitting2d` load exactly as before;
 Clear Constraints removes the field.
@@ -455,7 +496,10 @@ other joints. A version 2 Hands setting of `All fingertips` becomes
 Fingertips on; `Off` and `Middle tips` become Fingertips off. A stored
 Optimize setting is always kept; data from before version 4 without one keeps
 `Limbs + head`, the old default. Lock and Hide are stored per marker (version
-5); older data loads with every marker unlocked and visible. Collapsed tree
+5); older data loads with every marker unlocked and visible. The Depth amount
+is `depthAmount` (version 6; `null` is Auto). Older data has none, and a
+stored `Near` / `Far` keeps acting as a side-only hint until an amount is
+set. Collapsed tree
 branches are not saved. Hide bone handles is stored with the node, not with
 the pose.
 
@@ -473,7 +517,10 @@ the pose.
   or offset, adjust Camera Zoom or the positioning radar first, or use Whole
   body with Move root.
 - A single 2D view cannot tell toward-camera from away-from-camera bends;
-  use the Depth hint or Flip (also on `L/R Hand`). A hand Flip is often
+  set a Depth amount or use Flip (also on `L/R Hand`). When the targets
+  cannot be reached, segments without an amount still turn toward the image
+  plane to stretch their projection (Fit Pose does this on purpose); set
+  amounts on the segments whose depth matters. A hand Flip is often
   refused near the rest pose: there the mirrored direction would need more
   side bend than the wrist allows, and the forearm cannot roll in the fitting
   rig.
