@@ -50,6 +50,7 @@ import {
     normalizeSAMProjectionFrame,
     serializePoseStudioCharacter,
 } from "./pose_studio/characters.mjs?v=20260908.14";
+import { PoseCharacterTransformController } from "./pose_studio/character_transform_controller.mjs?v=20261102.2";
 import {
     MAX_VIDEO_POSE_SAMPLES,
     canvasToBlob,
@@ -4516,6 +4517,7 @@ class PoseStudioWidget {
         clearTimeout(this._characterSyncTimer);
         this._characterSyncTimer = null;
         this._closeCharacterRemoveModal?.();
+        this.characterTransform?.dispose();
         this._activeSaveLibraryClose?.(true);
         this._pendingMorphSolve = null;
         this._morphSolveInFlight = false;
@@ -6344,6 +6346,7 @@ class PoseStudioWidget {
                 this.radarRedraw?.();
                 this.cropGuideController?.draw();
                 this.host.onViewportRender?.();
+                this.characterTransform?.onViewportRender();
             },
             transparentBackground: this.host.embedded === true,
             skinMode: 'naked',
@@ -6395,6 +6398,12 @@ class PoseStudioWidget {
             theme: "pose-studio",
         });
         this.startResizeObserver();
+
+        // Viewport Pose / Move / Rotate modes and the Characters panel Transform fields.
+        this.characterTransform = new PoseCharacterTransformController(this);
+        this.characterTransform.attach(this.viewer, this.canvasContainer);
+        this._viewerInitPromise?.then(() => this.characterTransform?.onViewerReady(), () => {});
+        this.renderCharactersUI();
     }
 
     // === UI Helper Methods ===
@@ -7038,6 +7047,7 @@ class PoseStudioWidget {
         remove.addEventListener("click", () => this.showCharacterRemoveConfirm(active));
         toolbar.append(colorField, remove);
         content.appendChild(toolbar);
+        this.characterTransform?.renderPanel(content);
     }
 
     showCharacterRemoveConfirm(character) {
