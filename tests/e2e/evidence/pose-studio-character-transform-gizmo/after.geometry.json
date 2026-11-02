@@ -1,0 +1,569 @@
+{
+  "mode": "move",
+  "space": "local",
+  "gizmo_attached": true,
+  "gizmo_to_pelvis_distance": 0,
+  "active_character": "character-2",
+  "characters": [
+    {
+      "id": "character-1",
+      "transform": {
+        "x": -3.2,
+        "y": 0,
+        "z": 1,
+        "zoom": 1
+      },
+      "modelRotation": [
+        0,
+        55,
+        0
+      ]
+    },
+    {
+      "id": "character-2",
+      "transform": {
+        "x": 3.2,
+        "y": 0,
+        "z": -2,
+        "zoom": 1
+      },
+      "modelRotation": [
+        0,
+        -55,
+        0
+      ]
+    }
+  ],
+  "fields": {
+    "position": [
+      "3.2",
+      "0",
+      "-2"
+    ],
+    "rotation": [
+      "0",
+      "-55",
+      "0"
+    ]
+  },
+  "rotation_order": "XYZ",
+  "gizmo_layer_on_capture_camera": false,
+  "widget_rect": {
+    "x": 70,
+    "y": 116,
+    "width": 1400,
+    "height": 834
+  },
+  "timings": {
+    "pointermove_handler_ms": {
+      "n": 80,
+      "avg": 3.597,
+      "p95": 4.8,
+      "max": 6.1
+    },
+    "render_ms": {
+      "n": 89,
+      "avg": 0.74,
+      "p95": 1.1,
+      "max": 4
+    }
+  },
+  "library_roundtrip": {
+    "ok": true,
+    "id": {
+      "id": "local_user_poses/poses/Uncategorized/gizmo-roundtrip-1793596011284",
+      "name": "gizmo-roundtrip-1793596011284",
+      "repository": "local_user_poses",
+      "repository_path": "local_user_poses",
+      "category": "Uncategorized",
+      "category_path": "Uncategorized",
+      "tags": [],
+      "asset_type": "pose",
+      "is_animation": false,
+      "has_preview": false,
+      "preview_type": null,
+      "preview_mtime": 0,
+      "data": {
+        "bones": {},
+        "bonePositions": {
+          "Root": [
+            0,
+            -8.178140640258789,
+            -0.2576471269130707
+          ]
+        },
+        "modelRotation": [
+          0,
+          -110.64916444433385,
+          0
+        ],
+        "ikEffectorPositions": {
+          "pelvis": [
+            8.609045111256693,
+            -0.7325234413146973,
+            0.09424574673175809
+          ],
+          "hand_l": [
+            5.929394480547381,
+            0.27257058024406433,
+            3.064688775960363
+          ],
+          "hand_r": [
+            8.55630038569982,
+            0.27257058024406433,
+            -3.905913910891867
+          ],
+          "foot_l": [
+            8.111482871603437,
+            -7.604371070861816,
+            1.5122258869477725
+          ],
+          "foot_r": [
+            9.171073055542633,
+            -7.604371070861816,
+            -1.2994401756401053
+          ],
+          "head": [
+            8.326998002587603,
+            4.458751201629639,
+            -0.012045093325944625
+          ],
+          "upperarm_l": [
+            8.088787341233129,
+            2.7809441089630127,
+            1.3300742511186443
+          ],
+          "upperarm_r": [
+            9.033805888533815,
+            2.7809441089630127,
+            -1.1775712690421127
+          ]
+        },
+        "poleTargetPositions": {
+          "leftArm": [
+            8.492062887938953,
+            1.2848751544952393,
+            -0.22388298826798447
+          ],
+          "rightArm": [
+            10.42706819033097,
+            1.2848751544952393,
+            -5.35849901447254
+          ],
+          "leftLeg": [
+            8.425331874891736,
+            -4.198694705963135,
+            -2.213578822878512
+          ],
+          "rightLeg": [
+            9.063775317626334,
+            -4.198694705963135,
+            -3.9077147143088213
+          ]
+        },
+        "hipBonePosition": {
+          "hips": [
+            0,
+            7.445617198944092,
+            0.3518928736448288
+          ]
+        },
+        "cameraParams": {
+          "offset_x": 8.697236255094248,
+          "offset_y": 0,
+          "zoom": 1,
+          "yaw_deg": 0,
+          "pitch_deg": 0
+        },
+        "prompt": "",
+        "type": "scene_pose",
+        "schema_version": 3,
+        "active_character_id": "character-2",
+        "characters": [
+          {
+            "id": "character-1",
+            "slot": 0,
+            "name": "Main Character",
+            "color": "#ffffff",
+            "transform": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "zoom": 1
+            },
+            "mesh": {
+              "age": 25,
+              "gender": 0.5,
+              "weight": 0.5,
+              "muscle": 0.5,
+              "height": 0.5,
+              "breast_size": 0.5,
+              "firmness": 0.5,
+              "show_genitals": false,
+              "penis_len": 0.5,
+              "penis_circ": 0.5,
+              "penis_test": 0.5,
+              "head_size": 1,
+              "arm_size": 1,
+              "hand_size": 1,
+              "foot_size": 1,
+              "shoulder_l_length": 0.5,
+              "shoulder_r_length": 0.5,
+              "hip_l_length": 0.5,
+              "hip_r_length": 0.5,
+              "upper_arm_l_length": 0.5,
+              "upper_arm_r_length": 0.5,
+              "forearm_l_length": 0.5,
+              "forearm_r_length": 0.5,
+              "thigh_l_length": 0.5,
+              "thigh_r_length": 0.5,
+              "shin_l_length": 0.5,
+              "shin_r_length": 0.5,
+              "spine_length": 0.5
+            },
+            "poses": [
+              {
+                "bones": {},
+                "bonePositions": {
+                  "Root": [
+                    0,
+                    -8.178140640258789,
+                    -0.2576471269130707
+                  ]
+                },
+                "modelRotation": [
+                  0,
+                  0,
+                  0
+                ],
+                "ikEffectorPositions": {
+                  "pelvis": [
+                    0,
+                    -0.7325234413146973,
+                    0.09424574673175812
+                  ],
+                  "hand_l": [
+                    3.724578380584717,
+                    0.27257058024406433,
+                    1.5542372465133667
+                  ],
+                  "hand_r": [
+                    -3.724578380584717,
+                    0.27257058024406433,
+                    1.5542372465133667
+                  ],
+                  "foot_l": [
+                    1.5023479461669922,
+                    -7.604371070861816,
+                    0.059800006449222565
+                  ],
+                  "foot_r": [
+                    -1.5023479461669922,
+                    -7.604371070861816,
+                    0.059800006449222565
+                  ],
+                  "head": [
+                    0,
+                    4.458751201629639,
+                    0.3956562876701355
+                  ],
+                  "upperarm_l": [
+                    1.3399016857147217,
+                    2.7809441089630127,
+                    0.14527232944965363
+                  ],
+                  "upperarm_r": [
+                    -1.3399016857147217,
+                    2.7809441089630127,
+                    0.14527232944965363
+                  ]
+                },
+                "poleTargetPositions": {
+                  "leftArm": [
+                    2.7435618845235603,
+                    1.2848751544952393,
+                    0.31589913726704766
+                  ],
+                  "rightArm": [
+                    -2.7435618845235603,
+                    1.2848751544952393,
+                    0.31589913726704766
+                  ],
+                  "leftLeg": [
+                    0.9052218579170489,
+                    -4.198694705963135,
+                    1.0799989271800934
+                  ],
+                  "rightLeg": [
+                    -0.9052218579170489,
+                    -4.198694705963135,
+                    1.0799989271800934
+                  ]
+                },
+                "hipBonePosition": {
+                  "hips": [
+                    0,
+                    7.445617198944092,
+                    0.3518928736448288
+                  ]
+                },
+                "cameraParams": {
+                  "zoom": 1,
+                  "offset_x": 0,
+                  "offset_y": 0,
+                  "yaw_deg": 0,
+                  "pitch_deg": 0
+                },
+                "prompt": ""
+              }
+            ],
+            "animation": {
+              "schemaVersion": 2,
+              "frameCount": 24,
+              "duration": 2,
+              "fps": 12,
+              "loop": true,
+              "autoKey": true,
+              "snap": true,
+              "defaultInterpolation": "easeInOut",
+              "basePose": {
+                "bones": {},
+                "modelRotation": [
+                  0,
+                  0,
+                  0
+                ]
+              },
+              "baseTransform": {
+                "x": 0,
+                "y": 0,
+                "z": 0,
+                "zoom": 1
+              },
+              "tracks": {}
+            }
+          },
+          {
+            "id": "character-2",
+            "slot": 1,
+            "name": "Character 2",
+            "color": "#8ec5ff",
+            "transform": {
+              "x": 8.697236255094248,
+              "y": 0,
+              "z": 0.12748101302601855,
+              "zoom": 1
+            },
+            "mesh": {
+              "age": 25,
+              "gender": 0.5,
+              "weight": 0.5,
+              "muscle": 0.5,
+              "height": 0.5,
+              "breast_size": 0.5,
+              "firmness": 0.5,
+              "show_genitals": false,
+              "penis_len": 0.5,
+              "penis_circ": 0.5,
+              "penis_test": 0.5,
+              "head_size": 1,
+              "arm_size": 1,
+              "hand_size": 1,
+              "foot_size": 1,
+              "shoulder_l_length": 0.5,
+              "shoulder_r_length": 0.5,
+              "hip_l_length": 0.5,
+              "hip_r_length": 0.5,
+              "upper_arm_l_length": 0.5,
+              "upper_arm_r_length": 0.5,
+              "forearm_l_length": 0.5,
+              "forearm_r_length": 0.5,
+              "thigh_l_length": 0.5,
+              "thigh_r_length": 0.5,
+              "shin_l_length": 0.5,
+              "shin_r_length": 0.5,
+              "spine_length": 0.5
+            },
+            "poses": [
+              {
+                "bones": {},
+                "bonePositions": {
+                  "Root": [
+                    0,
+                    -8.178140640258789,
+                    -0.2576471269130707
+                  ]
+                },
+                "modelRotation": [
+                  0,
+                  -110.64916444433385,
+                  0
+                ],
+                "ikEffectorPositions": {
+                  "pelvis": [
+                    8.609045111256693,
+                    -0.7325234413146973,
+                    0.09424574673175809
+                  ],
+                  "hand_l": [
+                    5.929394480547381,
+                    0.27257058024406433,
+                    3.064688775960363
+                  ],
+                  "hand_r": [
+                    8.55630038569982,
+                    0.27257058024406433,
+                    -3.905913910891867
+                  ],
+                  "foot_l": [
+                    8.111482871603437,
+                    -7.604371070861816,
+                    1.5122258869477725
+                  ],
+                  "foot_r": [
+                    9.171073055542633,
+                    -7.604371070861816,
+                    -1.2994401756401053
+                  ],
+                  "head": [
+                    8.326998002587603,
+                    4.458751201629639,
+                    -0.012045093325944625
+                  ],
+                  "upperarm_l": [
+                    8.088787341233129,
+                    2.7809441089630127,
+                    1.3300742511186443
+                  ],
+                  "upperarm_r": [
+                    9.033805888533815,
+                    2.7809441089630127,
+                    -1.1775712690421127
+                  ]
+                },
+                "poleTargetPositions": {
+                  "leftArm": [
+                    8.492062887938953,
+                    1.2848751544952393,
+                    -0.22388298826798447
+                  ],
+                  "rightArm": [
+                    10.42706819033097,
+                    1.2848751544952393,
+                    -5.35849901447254
+                  ],
+                  "leftLeg": [
+                    8.425331874891736,
+                    -4.198694705963135,
+                    -2.213578822878512
+                  ],
+                  "rightLeg": [
+                    9.063775317626334,
+                    -4.198694705963135,
+                    -3.9077147143088213
+                  ]
+                },
+                "hipBonePosition": {
+                  "hips": [
+                    0,
+                    7.445617198944092,
+                    0.3518928736448288
+                  ]
+                },
+                "cameraParams": {
+                  "offset_x": 8.697236255094248,
+                  "offset_y": 0,
+                  "zoom": 1,
+                  "yaw_deg": 0,
+                  "pitch_deg": 0
+                },
+                "prompt": ""
+              }
+            ],
+            "animation": {
+              "schemaVersion": 2,
+              "frameCount": 24,
+              "duration": 2,
+              "fps": 12,
+              "loop": true,
+              "autoKey": true,
+              "snap": true,
+              "defaultInterpolation": "easeInOut",
+              "basePose": {
+                "bones": {},
+                "modelRotation": [
+                  0,
+                  0,
+                  0
+                ],
+                "prompt": ""
+              },
+              "baseTransform": {
+                "x": 8.697236255094248,
+                "y": 0,
+                "z": 0.12748101302601855,
+                "zoom": 1
+              },
+              "tracks": {}
+            }
+          }
+        ],
+        "timeline": {
+          "fps": 12,
+          "duration": 2,
+          "frameCount": 24,
+          "currentFrame": 0,
+          "loop": true
+        },
+        "activeTab": 0,
+        "pose_prompts": [
+          ""
+        ],
+        "camera": {
+          "yaw_deg": 0,
+          "pitch_deg": 0
+        },
+        "_library": {
+          "asset_type": "pose",
+          "repository": "local_user_poses",
+          "category": "Uncategorized",
+          "tags": []
+        }
+      }
+    },
+    "before": {
+      "transform": {
+        "x": 8.697236255094248,
+        "y": 0,
+        "z": 0.12748101302601855,
+        "zoom": 1
+      },
+      "rotation": [
+        0,
+        -110.64916444433385,
+        0
+      ]
+    },
+    "after": {
+      "transform": {
+        "x": 8.697236255094248,
+        "y": 0,
+        "z": 0.12748101302601855,
+        "zoom": 1
+      },
+      "rotation": [
+        0,
+        -110.64916444433385,
+        0
+      ]
+    },
+    "listed": [
+      {
+        "name": "gizmo-roundtrip-1793596011284",
+        "repository": "local_user_poses",
+        "category": "Uncategorized"
+      }
+    ]
+  },
+  "page_errors": []
+}
